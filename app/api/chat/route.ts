@@ -1,14 +1,31 @@
+import { connectToDatabase } from '@/lib/mongodb';
+import { Company } from '@/models/Company';
+
 export async function POST(req: Request) {
   try {
     const { messages, companyId } = await req.json();
 
-    // Context / Jira markdown data
-    const jiraMarkdownContext = `
-    # Jira Active Tickets
-    - JIRA-101: Authentication fix. Status: In Progress.
-    `;
+    if (!companyId) {
+      return new Response('Missing companyId parameter', { status: 400 });
+    }
 
-    // 1. Call Mistral REST API directly using native fetch
+    // 1. Connect directly to MongoDB
+    await connectToDatabase();
+
+    // 2. Query company data directly using Mongoose
+    const company = await Company.findOne(
+      { name: companyId }, // or { companyId: companyId } depending on your schema field
+      { jiraData: 1, _id: 0 }
+    ).lean();
+
+    // Extract jiraData string/JSON or default to fallback message
+    const jiraMarkdownContext = company?.jiraData
+      ? typeof company.jiraData === 'string'
+        ? company.jiraData
+        : JSON.stringify(company.jiraData)
+      : 'No Jira context found for this company.';
+
+    // 3. Call Mistral REST API using native fetch
     const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -21,7 +38,8 @@ export async function POST(req: Request) {
         messages: [
           {
             role: 'system',
-            content: `You are an AI assistant for ${companyId}. Context:\n${jiraMarkdownContext}`,
+            content: `You are an AI assistant for company: ${companyId}.\n\n
+                      Context Jira Documentation:\n${jiraMarkdownContext}`,
           },
           ...messages,
         ],
@@ -33,7 +51,7 @@ export async function POST(req: Request) {
       return new Response(`Mistral API Error: ${errorText}`, { status: response.status });
     }
 
-    // 2. Parse Mistral's Server-Sent Events (SSE) and stream plain text chunks to frontend
+    // 4. Parse Mistral SSE stream and forward plain text to frontend
     const encoder = new TextEncoder();
     const decoder = new TextDecoder();
 
@@ -53,11 +71,11 @@ export async function POST(req: Request) {
 
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split('\n');
-          buffer = lines.pop() || ''; // Keep incomplete trailing lines in buffer
+          buffer = lines.pop() || '';
 
           for (const line of lines) {
             const trimmed = line.trim();
-            if (!trimmed || trimmed.startsWith(':')) continue; // Skip heartbeats/empty lines
+            if (!trimmed || trimmed.startsWith(':')) continue;
             if (trimmed === 'data: [DONE]') break;
 
             if (trimmed.startsWith('data: ')) {
