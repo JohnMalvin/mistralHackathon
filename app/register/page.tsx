@@ -3,24 +3,27 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import AccountTypeTabs from '@/components/auth/AccountTypeTabs';
-import AuthShell from '@/components/auth/AuthShell';
-import type { AccountType } from '@/models/User';
+import {
+  Sparkles,
+  User,
+  Mail,
+  Lock,
+  Building2,
+  ArrowRight,
+  AlertCircle,
+  Link as LinkIconLucide,
+  Check,
+  Copy,
+} from 'lucide-react';
+import { useStore } from '@/lib/store';
+import { CompanyDetail, buildImportNode } from '@/lib/companyImport';
+import { ImportNode } from '@/lib/types';
 
-const TEAM_SIZES = ['1–10', '11–50', '51–200', '201–1000', '1000+'];
+type Step = 'account' | 'jira' | 'done';
 
-function RegisterForm() {
+export default function RegisterPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const [accountType, setAccountType] = useState<AccountType>('individual');
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    password: '',
-    companyName: '',
-    website: '',
-    teamSize: TEAM_SIZES[0],
-  });
+  const [formData, setFormData] = useState({ name: '', email: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -33,26 +36,15 @@ function RegisterForm() {
     }
   }, [searchParams]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const shareUrl =
+    companyId && typeof window !== 'undefined'
+      ? `${window.location.origin}/shared/company/${companyId}`
+      : '';
+
+  async function handleCreateAccount(e: React.FormEvent) {
     e.preventDefault();
     setError('');
     setLoading(true);
-
-    // Only send the business fields on a business signup so an individual
-    // account never carries a half-filled company profile.
-    const payload = {
-      name: formData.name,
-      email: formData.email,
-      password: formData.password,
-      accountType,
-      ...(isBusiness
-        ? {
-            companyName: formData.companyName,
-            website: formData.website,
-            teamSize: formData.teamSize,
-          }
-        : {}),
-    };
 
     try {
       const res = await fetch('/api/auth/register', {
@@ -60,22 +52,46 @@ function RegisterForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error || 'Could not create the account.');
+        throw new Error(data.error || 'Failed to create account');
       }
 
-      // Redirect to login page upon successful account creation, keeping the
-      // chosen category so the sign-in form opens on the matching tab.
-      router.push(`/login?registered=true&type=${accountType}`);
+      // Redirect to login page upon successful account creation
+      router.push('/login?registered=true');
     } catch (err: any) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  };
+  }
+
+  async function handleCopyLink() {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // clipboard access denied — nothing we can do, silently ignore
+    }
+  }
+
+  async function handleOpenWorkspace() {
+    if (!companyId) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/companies/${companyId}`);
+      if (!res.ok) throw new Error('Failed to load company');
+      const detail: CompanyDetail = await res.json();
+      const node: ImportNode = await buildImportNode(detail);
+      const localId = importTree(node, null);
+      router.push(`/doc/${localId}`);
+    } catch {
+      setError('Failed to open your workspace.');
+      setLoading(false);
+    }
+  }
 
   return (
     <AuthShell
@@ -97,124 +113,90 @@ function RegisterForm() {
           >
             Sign in
           </Link>
-        </>
-      }
-    >
-      <AccountTypeTabs
-        value={accountType}
-        onChange={setAccountType}
-        disabled={loading}
-      />
+          <h2 className="mt-4 text-2xl font-bold text-white">Create an account</h2>
+          <p className="mt-1 text-sm text-zinc-400">
+            Start syncing your Notion notes with live Jira issues
+          </p>
+        </div>
 
-      {error && <p className="gb-note gb-note--error">{error}</p>}
+        {/* Error Alert */}
+        {error && (
+          <div className="mb-6 flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-3.5 text-sm text-red-400">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
 
-      <form onSubmit={handleSubmit}>
-        <label className="gb-field">
-          <span className="gb-label mb-2 block">
-            {isBusiness ? 'Your name' : 'Full name'}
-          </span>
-          <input
-            type="text"
-            required
-            placeholder="Ada Lovelace"
-            value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            className="gb-input"
-          />
-        </label>
-
-        {isBusiness && (
-          <>
-            <label className="gb-field">
-              <span className="gb-label mb-2 block">Company name</span>
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-zinc-300">
+              Full Name
+            </label>
+            <div className="relative">
+              <User className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
               <input
                 type="text"
                 required
-                placeholder="Acme Inc."
-                value={formData.companyName}
-                onChange={(e) =>
-                  setFormData({ ...formData, companyName: e.target.value })
-                }
-                className="gb-input"
+                placeholder="John Doe"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                className="w-full rounded-xl border border-zinc-800 bg-zinc-900/80 py-2.5 pl-10 pr-4 text-sm text-white placeholder-zinc-500 transition-colors focus:border-sky-500 focus:outline-none"
               />
-            </label>
+            </div>
+          </div>
 
-            <label className="gb-field">
-              <span className="gb-label mb-2 block">
-                Company website — optional
-              </span>
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-zinc-300">
+              Email Address
+            </label>
+            <div className="relative">
+              <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
               <input
-                type="url"
-                placeholder="https://acme.com"
-                value={formData.website}
-                onChange={(e) =>
-                  setFormData({ ...formData, website: e.target.value })
-                }
-                className="gb-input"
+                type="email"
+                required
+                placeholder="name@example.com"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                className="w-full rounded-xl border border-zinc-800 bg-zinc-900/80 py-2.5 pl-10 pr-4 text-sm text-white placeholder-zinc-500 transition-colors focus:border-sky-500 focus:outline-none"
               />
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-zinc-300">
+              Password
             </label>
+            <div className="relative">
+              <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+              <input
+                type="password"
+                required
+                placeholder="••••••••"
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                className="w-full rounded-xl border border-zinc-800 bg-zinc-900/80 py-2.5 pl-10 pr-4 text-sm text-white placeholder-zinc-500 transition-colors focus:border-sky-500 focus:outline-none"
+              />
+            </div>
+          </div>
 
-            <label className="gb-field">
-              <span className="gb-label mb-2 block">Team size</span>
-              <select
-                value={formData.teamSize}
-                onChange={(e) =>
-                  setFormData({ ...formData, teamSize: e.target.value })
-                }
-                className="gb-input gb-select"
-              >
-                {TEAM_SIZES.map((size) => (
-                  <option key={size} value={size}>
-                    {size} people
-                  </option>
-                ))}
-              </select>
-            </label>
-          </>
-        )}
+          <button
+            type="submit"
+            disabled={loading}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-sky-500 py-3 text-sm font-semibold text-black transition-all hover:bg-sky-400 disabled:opacity-50"
+          >
+            {loading ? 'Creating account...' : 'Get Started'}
+            {!loading && <ArrowRight className="h-4 w-4" />}
+          </button>
+        </form>
 
-        <label className="gb-field">
-          <span className="gb-label mb-2 block">
-            {isBusiness ? 'Work email address' : 'Email address'}
-          </span>
-          <input
-            type="email"
-            required
-            placeholder={isBusiness ? 'you@acme.com' : 'you@example.com'}
-            value={formData.email}
-            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-            className="gb-input"
-          />
-        </label>
-
-        <label className="gb-field">
-          <span className="gb-label mb-2 block">Password</span>
-          <input
-            type="password"
-            required
-            placeholder="••••••••"
-            value={formData.password}
-            onChange={(e) =>
-              setFormData({ ...formData, password: e.target.value })
-            }
-            className="gb-input"
-          />
-        </label>
-
-        <button type="submit" disabled={loading} className="gb-btn mt-2">
-          {loading ? 'Creating account…' : 'Create account'}
-        </button>
-      </form>
-    </AuthShell>
-  );
-}
-
-// useSearchParams() opts the tree into client-side rendering, so the form
-// needs a Suspense boundary for the page to prerender.
-export default function RegisterPage() {
-  return (
-    <Suspense fallback={<div className="gb min-h-screen" />}>
-      <RegisterForm />
-    </Suspense>
+        <p className="mt-6 text-center text-xs text-zinc-400">
+          Already have an account?{' '}
+          <Link href="/login" className="font-medium text-sky-400 hover:underline">
+            Sign in
+          </Link>
+        </p>
+      </div>
+    </div>
   );
 }

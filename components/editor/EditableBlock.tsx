@@ -10,6 +10,7 @@ import {
     DragHandleIcon,
     CheckIcon,
     ChevronRightIcon,
+    LinkIcon,
 } from '@/components/ui/Icons';
 
 function setCaret(el: HTMLElement, pos: 'start' | 'end' | number) {
@@ -44,6 +45,7 @@ const PLACEHOLDERS: Partial<Record<BlockType, string>> = {
     quote: 'Quote',
     callout: 'Callout',
     code: 'Code',
+    link: 'Link label',
 };
 
 export default function EditableBlock({
@@ -68,6 +70,7 @@ export default function EditableBlock({
     setDragId: (id: string | null) => void;
 }) {
     const updateBlock = useStore((s) => s.updateBlock);
+    const updateBlockRows = useStore((s) => s.updateBlockRows);
     const deleteBlock = useStore((s) => s.deleteBlock);
     const addBlock = useStore((s) => s.addBlock);
     const changeBlockType = useStore((s) => s.changeBlockType);
@@ -125,6 +128,12 @@ export default function EditableBlock({
 
     function handleSelectType(type: BlockType) {
         changeBlockType(pageId, block.id, type);
+        if (type === 'table') {
+            updateBlockRows(pageId, block.id, [
+                ['', ''],
+                ['', ''],
+            ]);
+        }
         setContentImmediate('');
         setSlashOpen(false);
         requestAnimationFrame(() => ref.current?.focus());
@@ -299,6 +308,7 @@ export default function EditableBlock({
                     onToggleCollapsed={() => toggleCollapsed(pageId, block.id)}
                     onDeleteDivider={() => deleteBlock(pageId, block.id)}
                     onAddAfterDivider={handleAddBelow}
+                    onUpdateRows={(rows) => updateBlockRows(pageId, block.id, rows)}
                 />
                 {slashOpen && (
                     <SlashMenu
@@ -320,6 +330,7 @@ function BlockBody({
     onToggleCollapsed,
     onDeleteDivider,
     onAddAfterDivider,
+    onUpdateRows,
 }: {
     block: Block;
     ordinal?: number;
@@ -328,6 +339,7 @@ function BlockBody({
     onToggleCollapsed: () => void;
     onDeleteDivider: () => void;
     onAddAfterDivider: () => void;
+    onUpdateRows: (rows: string[][]) => void;
 }) {
     switch (block.type) {
         case 'heading1':
@@ -451,6 +463,91 @@ function BlockBody({
                     />
                 </div>
             );
+        case 'table': {
+            const rows = block.rows && block.rows.length > 0 ? block.rows : [['', '']];
+            const colCount = rows[0]?.length ?? 1;
+
+            function setCell(r: number, c: number, value: string) {
+                const next = rows.map((row) => [...row]);
+                next[r][c] = value;
+                onUpdateRows(next);
+            }
+            function addRow() {
+                onUpdateRows([...rows, Array(colCount).fill('')]);
+            }
+            function addColumn() {
+                onUpdateRows(rows.map((row) => [...row, '']));
+            }
+
+            return (
+                <div className="my-1">
+                    <table className="w-full border-collapse overflow-hidden rounded-md border border-border-light text-sm dark:border-border-dark">
+                        <tbody>
+                            {rows.map((row, r) => (
+                                <tr key={r}>
+                                    {row.map((cell, c) => (
+                                        <td
+                                            key={c}
+                                            contentEditable
+                                            suppressContentEditableWarning
+                                            onBlur={(e) =>
+                                                setCell(r, c, e.currentTarget.innerText)
+                                            }
+                                            className={`min-w-[6rem] border border-border-light px-2 py-1 align-top outline-none focus:ring-1 focus:ring-accent dark:border-border-dark ${
+                                                r === 0
+                                                    ? 'bg-[#f7f6f3] font-medium dark:bg-[#2c2c2c]'
+                                                    : ''
+                                            }`}
+                                        >
+                                            {cell}
+                                        </td>
+                                    ))}
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                    <div className="mt-1 flex gap-2">
+                        <button
+                            onClick={addRow}
+                            className="rounded px-1.5 py-0.5 text-xs text-muted-light hover:bg-hover-light dark:text-muted-dark dark:hover:bg-hover-dark"
+                        >
+                            + Row
+                        </button>
+                        <button
+                            onClick={addColumn}
+                            className="rounded px-1.5 py-0.5 text-xs text-muted-light hover:bg-hover-light dark:text-muted-dark dark:hover:bg-hover-dark"
+                        >
+                            + Column
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+        case 'link': {
+            const target = block.href || block.content;
+            return (
+                <div className="inline-flex w-fit items-center gap-1 rounded-md border border-border-light py-1 pl-2 pr-1 dark:border-border-dark">
+                    <div
+                        {...editableProps}
+                        className={editableProps.className + ' px-1 text-sm font-medium'}
+                    />
+                    <a
+                        href={target || '#'}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onMouseDown={(e) => e.stopPropagation()}
+                        className={`flex shrink-0 items-center gap-1 rounded px-2 py-1 text-xs font-medium text-white ${
+                            target
+                                ? 'bg-accent hover:bg-accent/90'
+                                : 'pointer-events-none bg-muted-light dark:bg-muted-dark'
+                        }`}
+                    >
+                        <LinkIcon className="h-3 w-3" />
+                        Open
+                    </a>
+                </div>
+            );
+        }
         case 'divider':
             return (
                 <div

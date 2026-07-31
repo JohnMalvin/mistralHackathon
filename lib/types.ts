@@ -10,7 +10,9 @@ export type BlockType =
     | 'quote'
     | 'callout'
     | 'code'
-    | 'divider';
+    | 'divider'
+    | 'link'
+    | 'table';
 
 export interface Block {
     id: string;
@@ -19,6 +21,8 @@ export interface Block {
     checked?: boolean;
     color?: string;
     collapsed?: boolean; // for toggle blocks
+    href?: string; // for link blocks — falls back to content if unset
+    rows?: string[][]; // for table blocks — first row is treated as the header
 }
 
 export interface PageData {
@@ -71,4 +75,6 @@ export const BLOCK_LABELS: Record<BlockType, string> = {
     callout: 'Callout',
     code: 'Code',
     divider: 'Divider',
+    link: 'Link button',
+    table: 'Table',
 };

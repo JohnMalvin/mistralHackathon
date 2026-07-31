@@ -6,12 +6,16 @@ import Link from 'next/link';
 import AccountTypeTabs from '@/components/auth/AccountTypeTabs';
 import AuthShell from '@/components/auth/AuthShell';
 import type { AccountType } from '@/models/User';
+import { Sparkles, Mail, Lock, ArrowRight, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { useStore } from '@/lib/store';
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   const [accountType, setAccountType] = useState<AccountType>('individual');
+  const resetWorkspace = useStore((s) => s.resetWorkspace);
+  
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -45,6 +49,10 @@ function LoginForm() {
       if (!res.ok) {
         throw new Error(data.error || 'That email and password do not match.');
       }
+
+      // A different account may have been signed in on this browser before —
+      // drop its cached pages/companies so this login starts from a clean slate.
+      resetWorkspace();
 
       // Redirect user directly to authenticated workspace page where they search for the companies
       router.push('/companies');

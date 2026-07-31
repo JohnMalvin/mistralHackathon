@@ -14,7 +14,17 @@ const VALID_BLOCK_TYPES: ReadonlySet<BlockType> = new Set([
     'callout',
     'code',
     'divider',
+    'link',
+    'table',
 ]);
+
+function normalizeRows(raw: unknown): string[][] {
+    if (!Array.isArray(raw)) return [['', '']];
+    const rows = raw
+        .filter((row): row is unknown[] => Array.isArray(row))
+        .map((row) => row.map((cell) => (typeof cell === 'string' ? cell : '')));
+    return rows.length > 0 ? rows : [['', '']];
+}
 
 function normalizeBlock(raw: unknown): Block {
     const r = (raw && typeof raw === 'object' ? raw : {}) as Record<
@@ -32,6 +42,8 @@ function normalizeBlock(raw: unknown): Block {
     if (typeof r.checked === 'boolean') block.checked = r.checked;
     if (typeof r.color === 'string') block.color = r.color;
     if (typeof r.collapsed === 'boolean') block.collapsed = r.collapsed;
+    if (typeof r.href === 'string') block.href = r.href;
+    if (type === 'table') block.rows = normalizeRows(r.rows);
     return block;
 }
 

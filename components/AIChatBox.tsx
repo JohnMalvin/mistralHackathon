@@ -3,71 +3,28 @@
 import { useState, useRef, useEffect } from 'react';
 import { ChevronDown, Send, Sparkles } from 'lucide-react';
 
-/**
- * Helper to generate the exact system prompt instructing the AI
- * on how to navigate the nested Mongoose schema and format responses cleanly without HTML/Markdown.
- */
-export function buildSystemPrompt(contextDataJson: string, userQuery: string): string {
-  return `You are an intelligent knowledge base assistant. You analyze hierarchical organization data to answer user questions clearly.
-
-### Data Schema & Types Reference
-The context data you receive strictly follows this entity schema:
-
-1. Company (Top Level)
-   - Schema: { _id: ObjectId, name: string, jiraData?: Record<string, any> }
-   - Contains: Workspaces
-
-2. Workspace
-   - Schema: { _id: ObjectId, name: string, companyId: ObjectId }
-   - Belongs to: Company
-   - Contains: Projects
-
-3. Project
-   - Schema: { _id: ObjectId, name: string, workspaceId: ObjectId, rootPageIds: ObjectId[] }
-   - Belongs to: Workspace
-   - Contains: Pages (Root tree starts from rootPageIds)
-
-4. Page
-   - Schema: { _id: ObjectId, title: string, icon?: string, blocks: any, projectId?: ObjectId, parentId?: ObjectId | null, children: ObjectId[] }
-   - Hierarchy: If parentId is null/undefined, it is a Root Page. If children array is non-empty, it acts as a folder directory.
-
----
-
-### Formatting Constraints (Strict Plain Text Rules)
-- DO NOT use Markdown syntax (NO asterisks like **bold** or *italic*, NO hashtags like # Header, NO markdown links like [text](url)).
-- DO NOT use HTML tags.
-- Use real bullet characters (•) for lists.
-- Use double newlines / line breaks to separate paragraphs.
-- For links, write out raw, full URLs directly (e.g., https://example.com/page/123).
-- Always specify context paths at the top using clear text:
-  Context: Company Name > Workspace Name > Project Name > Page Title
-
----
-
-### Query Handling Instructions
-1. Match entity names or block content to the user's query.
-2. If multiple pages match, present a bulleted list of matching locations.
-3. Read content directly out of the Page's \`blocks\` attribute or Company's \`jiraData\`.
-
----
-
-Context Data:
-${contextDataJson}
-
-User Query:
-${userQuery}`;
-}
-
 interface Message {
   role: 'user' | 'assistant';
   content: string;
 }
 
-export default function AIChatBox({ pageId }: { pageId?: string }) {
+export default function AIChatBox({
+  pageId,
+  pageDbId,
+  pageTitle,
+}: {
+  pageId?: string | null;
+  pageDbId?: string | null;
+  pageTitle?: string;
+}) {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
+  // Only meaningful when pageDbId exists (i.e. this page came from an
+  // imported company/project) — 'page' scopes context to just this page's
+  // own content, 'project' also pulls in its sibling pages.
+  const [scope, setScope] = useState<'page' | 'project'>('project');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -78,11 +35,11 @@ export default function AIChatBox({ pageId }: { pageId?: string }) {
     scrollToBottom();
   }, [messages]);
 
-  const handleSendMessage = async (e: React.FormEvent) => {
+  const handleSendMessage = async (e: React.SyntheticEvent, override?: string) => {
     e.preventDefault();
-    if (!input.trim() || loading) return;
+    const userMsg = (override ?? input).trim();
+    if (!userMsg || loading) return;
 
-    const userMsg = input.trim();
     setInput('');
     setMessages((prev) => [...prev, { role: 'user', content: userMsg }]);
     setLoading(true);
@@ -95,7 +52,12 @@ export default function AIChatBox({ pageId }: { pageId?: string }) {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMsg, sessionId }),
+        body: JSON.stringify({
+          message: userMsg,
+          sessionId,
+          pageId: pageDbId || undefined,
+          scope,
+        }),
       });
 
       if (!response.body) return;
@@ -151,11 +113,57 @@ export default function AIChatBox({ pageId }: { pageId?: string }) {
             </div>
           </div>
 
+          {pageDbId && (
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center justify-between gap-2 border-b border-zinc-800 bg-zinc-900/40 px-3 py-2"
+            >
+              <span className="truncate text-[11px] text-zinc-500">
+                About: <span className="text-zinc-300">{pageTitle}</span>
+              </span>
+              <div className="flex shrink-0 gap-1 rounded-full bg-zinc-800 p-0.5 text-[10px]">
+                <button
+                  onClick={() => setScope('page')}
+                  className={`rounded-full px-2 py-0.5 ${
+                    scope === 'page' ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  This page
+                </button>
+                <button
+                  onClick={() => setScope('project')}
+                  className={`rounded-full px-2 py-0.5 ${
+                    scope === 'project' ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  Whole project
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="flex-1 overflow-y-auto p-4 space-y-3 text-sm">
             {messages.length === 0 ? (
-              <div className="flex h-full flex-col items-center justify-center text-center text-zinc-500">
-                <Sparkles className="mb-2 h-8 w-8 text-zinc-600" />
-                <p className="text-xs">Ask questions about this page or your synced Jira tasks.</p>
+              <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-zinc-500">
+                <Sparkles className="h-8 w-8 text-zinc-600" />
+                {pageDbId ? (
+                  <>
+                    <p className="text-xs">
+                      Ask about {scope === 'page' ? 'this page' : 'this project'}, or:
+                    </p>
+                    <button
+                      onClick={(e) => handleSendMessage(e, 'Summarize this page for me.')}
+                      className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-300 hover:bg-zinc-800"
+                    >
+                      Summarize this page
+                    </button>
+                  </>
+                ) : (
+                  <p className="text-xs">
+                    This page isn&apos;t part of an imported company or project, so I can only
+                    chat generally — nothing to look up yet.
+                  </p>
+                )}
               </div>
             ) : (
               messages.map((msg, index) => (

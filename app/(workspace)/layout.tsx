@@ -16,6 +16,7 @@ export default function WorkspaceLayout({
     const darkMode = useStore((s) => s.darkMode);
     const sidebarOpen = useStore((s) => s.sidebarOpen);
     const toggleSidebar = useStore((s) => s.toggleSidebar);
+    const pages = useStore((s) => s.pages);
     const pathname = usePathname();
 
     useEffect(() => {
@@ -26,6 +27,7 @@ export default function WorkspaceLayout({
     const activePageId = pathname?.startsWith('/doc/')
         ? pathname.split('/doc/')[1]
         : null;
+    const activePage = activePageId ? pages[activePageId] : null;
 
     return (
         <div className={darkMode ? 'dark' : ''}>
@@ -49,7 +51,13 @@ export default function WorkspaceLayout({
                 </main>
 
                 {/* Authorized Workspace Only: Ask AI Floating Interface */}
-                {mounted && <AIChatBox />}
+                {mounted && (
+                    <AIChatBox
+                        pageId={activePageId}
+                        pageDbId={activePage?.dbSourceId ?? null}
+                        pageTitle={activePage?.title || 'Untitled'}
+                    />
+                )}
             </div>
         </div>
     );

@@ -11,16 +11,17 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Jira import doesn't need a logged-in session — it falls back to
-  // JIRA_EMAIL / a fixed local owner when no session headers are present.
-  if (pathname.startsWith('/api/jira-import')) {
-    return NextResponse.next();
-  }
+  // Jira import works without a session (falls back to JIRA_EMAIL / a fixed
+  // local owner) but still uses a real session when one exists, so a logged
+  // -in user's import lands in their own company — so auth here is optional
+  // rather than skipped outright.
+  const optionalAuth = pathname.startsWith('/api/jira-import');
 
   // 2. Extract token from cookie
   const token = request.cookies.get('token')?.value;
 
   if (!token) {
+    if (optionalAuth) return NextResponse.next();
     return NextResponse.json(
       { error: 'Authentication required. No token provided.' },
       { status: 401 }
@@ -30,6 +31,7 @@ export async function middleware(request: NextRequest) {
   // 3. Verify JWT
   const payload = await verifyJWT(token);
   if (!payload) {
+    if (optionalAuth) return NextResponse.next();
     return NextResponse.json(
       { error: 'Invalid or expired token.' },
       { status: 401 }

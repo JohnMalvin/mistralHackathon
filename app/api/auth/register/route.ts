@@ -12,7 +12,7 @@ export async function POST(req: Request) {
     // registering as individuals.
     const accountType: AccountType = body.accountType ?? 'individual';
 
-    if (!name || !email || !password) {
+    if (!name || !email || !password || !companyName) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
@@ -57,6 +57,7 @@ export async function POST(req: Request) {
       { status: 201 }
     );
   } catch (error) {
+    console.error('Register error:', error);
     return NextResponse.json({ error: 'Registration failed' }, { status: 500 });
   }
 }
