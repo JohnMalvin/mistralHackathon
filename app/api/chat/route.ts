@@ -1,27 +1,7 @@
 // app/api/chat/route.ts
 import { connectToDatabase } from '@/lib/mongodb';
-import { Project } from '@/models/Project';
-import { Page } from '@/models/Page';
 import { ChatSession } from '@/models/ChatSession';
-
-async function getReconstructedJiraContext(projectId?: string) {
-  await connectToDatabase();
-
-  const project = projectId
-    ? await Project.findById(projectId).lean()
-    : await Project.findOne().sort({ updatedAt: -1 }).lean();
-
-  if (!project) return 'No Jira context found in database.';
-
-  const pages = await Page.find({ projectId: project._id }).lean();
-
-  const projectHeader = `# Project: ${project.name} (Key: ${project.jiraProjectKey || 'N/A'})\n\n`;
-  const pagesContent = pages
-    .map((p: any) => `## Page: ${p.title}\n${JSON.stringify(p.content, null, 2)}`)
-    .join('\n\n---\n\n');
-
-  return `${projectHeader}${pagesContent}`;
-}
+import { buildPageAIContext, formatPageAIContext } from '@/lib/aiContext';
 
 export async function POST(req: Request) {
   try {
@@ -29,7 +9,7 @@ export async function POST(req: Request) {
     const userId = req.headers.get('x-user-id');
     const userEmail = req.headers.get('x-user-email');
 
-    const { message, sessionId, projectId } = await req.json();
+    const { message, sessionId, pageId, scope } = await req.json();
 
     if (!message || !sessionId) {
       return Response.json(
@@ -40,7 +20,17 @@ export async function POST(req: Request) {
 
     await connectToDatabase();
 
-    const reconstructedContext = await getReconstructedJiraContext(projectId);
+    // pageId is the Mongo id of the page currently open in the editor
+    // (PageData.dbSourceId client-side) — only pages that came from an
+    // imported company/project have one, so only those get real context.
+    let reconstructedContext =
+      "No page is open, or this page isn't part of an imported company/project yet, so there's no extra context beyond this conversation.";
+    if (pageId) {
+      const ctx = await buildPageAIContext(pageId);
+      if (ctx) {
+        reconstructedContext = formatPageAIContext(ctx, scope === 'page' ? 'page' : 'project');
+      }
+    }
 
     // Bind chat session to the authenticated userId
     let chatSession = await ChatSession.findOne({ sessionId, userId });
@@ -64,7 +54,17 @@ export async function POST(req: Request) {
     const apiMessages = [
       {
         role: 'system',
-        content: `You are an AI assistant for project management updates. Active User Email: ${userEmail}\n\nContext Documentation:\n${reconstructedContext}`,
+        content: `You are an AI assistant for project management updates. Active User Email: ${userEmail}
+
+Formatting rules — this reply is shown as plain text, not rendered markdown, so:
+- Never use markdown syntax: no **bold**, no *italics*, no # headings, no [text](url) links, no backticks.
+- For lists, use a real bullet character (•) followed by a space, one per line.
+- Separate paragraphs with a blank line.
+- Write URLs out in full and bare, e.g. https://example.com/page.
+- Write like you're talking to someone, not formatting a document.
+
+Context Documentation:
+${reconstructedContext}`,
       },
       ...formattedHistory,
     ];

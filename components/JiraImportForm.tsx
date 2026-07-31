@@ -53,9 +53,11 @@ export default function JiraImportForm() {
         <div className="mx-auto max-w-2xl px-12 py-12">
             <h1 className="mb-1 text-2xl font-bold">Import from Jira</h1>
             <p className="mb-6 text-sm text-muted-light dark:text-muted-dark">
-                Paste a Jira project, board or backlog link. We&apos;ll pull the
-                project&apos;s issues via the Jira API and lay them out as
-                directories (by issue type) and files (one per issue).
+                Paste a link to your Jira project. We&apos;ll turn it into an
+                easy-to-read summary — grouped by topic, written in plain
+                language, with a status table and a link back to each item in
+                Jira. No Jira account or technical knowledge needed to read
+                it.
             </p>
 
             <div className="mb-4 flex items-center gap-2 rounded-md border border-border-light px-3 py-2 dark:border-border-dark">

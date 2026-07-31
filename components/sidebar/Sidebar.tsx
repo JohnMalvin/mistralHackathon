@@ -28,7 +28,27 @@ export default function Sidebar({
     const toggleSidebar = useStore((s) => s.toggleSidebar);
     const darkMode = useStore((s) => s.darkMode);
     const toggleDarkMode = useStore((s) => s.toggleDarkMode);
+    const resetWorkspace = useStore((s) => s.resetWorkspace);
     const [query, setQuery] = useState('');
+
+    // Company-owning accounts get "Import from Jira" (bring more data into
+    // their company); plain accounts get "Browse companies" (find one to
+    // join/pin) instead — never both.
+    const [hasCompany, setHasCompany] = useState<boolean | null>(null);
+    useEffect(() => {
+        let cancelled = false;
+        fetch('/api/companies/mine')
+            .then((res) => (res.ok ? res.json() : { hasCompany: false }))
+            .then((data) => {
+                if (!cancelled) setHasCompany(!!data.hasCompany);
+            })
+            .catch(() => {
+                if (!cancelled) setHasCompany(false);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     // Dropdown & Action states for Workspace Header
     const [isWorkspaceMenuOpen, setIsWorkspaceMenuOpen] = useState(false);
@@ -76,6 +96,9 @@ export default function Sidebar({
                 headers: { 'Content-Type': 'application/json' },
             });
             if (res.ok) {
+                // Whoever logs in next on this browser shouldn't see this
+                // account's pages/companies still sitting in local storage.
+                resetWorkspace();
                 router.push('/login');
                 router.refresh();
             }
@@ -142,7 +165,7 @@ export default function Sidebar({
                 {isWorkspaceMenuOpen && (
                     <div className="absolute left-3 top-full z-50 mt-1 w-56 rounded-lg border border-border-light bg-sidebar-light p-1 shadow-lg dark:border-border-dark dark:bg-sidebar-dark">
                         <div className="px-2 py-1 text-[10px] font-semibold tracking-wider text-muted-light uppercase dark:text-muted-dark">
-                            Workspace Actions
+                            Quick actions
                         </div>
 
                         {/* Sync Jira */}
@@ -153,7 +176,7 @@ export default function Sidebar({
                         >
                             <div className="flex items-center gap-2">
                                 <RefreshCw className={`h-3.5 w-3.5 text-sky-500 ${syncing ? 'animate-spin' : ''}`} />
-                                <span>{syncing ? 'Syncing Jira...' : 'Sync Jira Workspace'}</span>
+                                <span>{syncing ? 'Updating...' : 'Update from Jira'}</span>
                             </div>
                             {syncStatus === 'success' && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />}
                             {syncStatus === 'error' && <AlertCircle className="h-3.5 w-3.5 text-red-500" />}
@@ -268,20 +291,23 @@ export default function Sidebar({
                     <PlusIcon className="h-3.5 w-3.5" />
                     New page
                 </button>
-                <button
-                    onClick={() => router.push('/companies')}
-                    className="flex w-full items-center gap-2 rounded px-2 py-1 text-sm text-muted-light hover:bg-hover-light hover:text-ink-light dark:text-muted-dark dark:hover:bg-hover-dark dark:hover:text-ink-dark"
-                >
-                    <SearchIcon className="h-3.5 w-3.5" />
-                    Browse companies
-                </button>
-                <button
-                    onClick={() => router.push('/import-jira')}
-                    className="flex w-full items-center gap-2 rounded px-2 py-1 text-sm text-muted-light hover:bg-hover-light hover:text-ink-light dark:text-muted-dark dark:hover:bg-hover-dark dark:hover:text-ink-dark"
-                >
-                    <LinkIcon className="h-3.5 w-3.5" />
-                    Import from Jira
-                </button>
+                {hasCompany ? (
+                    <button
+                        onClick={() => router.push('/import-jira')}
+                        className="flex w-full items-center gap-2 rounded px-2 py-1 text-sm text-muted-light hover:bg-hover-light hover:text-ink-light dark:text-muted-dark dark:hover:bg-hover-dark dark:hover:text-ink-dark"
+                    >
+                        <LinkIcon className="h-3.5 w-3.5" />
+                        Import from Jira
+                    </button>
+                ) : (
+                    <button
+                        onClick={() => router.push('/companies')}
+                        className="flex w-full items-center gap-2 rounded px-2 py-1 text-sm text-muted-light hover:bg-hover-light hover:text-ink-light dark:text-muted-dark dark:hover:bg-hover-dark dark:hover:text-ink-dark"
+                    >
+                        <SearchIcon className="h-3.5 w-3.5" />
+                        Browse companies
+                    </button>
+                )}
                 <button
                     onClick={() => router.push('/trash')}
                     className="flex w-full items-center gap-2 rounded px-2 py-1 text-sm text-muted-light hover:bg-hover-light hover:text-ink-light dark:text-muted-dark dark:hover:bg-hover-dark dark:hover:text-ink-dark"

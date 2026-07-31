@@ -4,10 +4,12 @@ import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Sparkles, Mail, Lock, ArrowRight, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { useStore } from '@/lib/store';
 
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const resetWorkspace = useStore((s) => s.resetWorkspace);
   
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
@@ -38,6 +40,10 @@ export default function LoginPage() {
       if (!res.ok) {
         throw new Error(data.error || 'Invalid email or password');
       }
+
+      // A different account may have been signed in on this browser before —
+      // drop its cached pages/companies so this login starts from a clean slate.
+      resetWorkspace();
 
       // Redirect user directly to authenticated workspace page where they search for the companies
       router.push('/companies');

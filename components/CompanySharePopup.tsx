@@ -9,7 +9,7 @@ import {
     countCompanyDetail,
 } from '@/lib/companyImport';
 import { WorkspaceSection } from '@/components/CompanyTreePreview';
-import { FileIcon } from '@/components/ui/Icons';
+import { FileIcon, LinkIcon, CheckIcon } from '@/components/ui/Icons';
 
 type Phase = 'loading' | 'error' | 'popup' | 'declined' | 'working';
 
@@ -26,6 +26,17 @@ export default function CompanySharePopup({
     const [detail, setDetail] = useState<CompanyDetail | null>(null);
     const [alreadyPinned, setAlreadyPinned] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [copied, setCopied] = useState(false);
+
+    async function handleCopyLink() {
+        try {
+            await navigator.clipboard.writeText(window.location.href);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+        } catch {
+            // clipboard access denied — nothing we can do, silently ignore
+        }
+    }
 
     useEffect(() => {
         let cancelled = false;
@@ -115,13 +126,26 @@ export default function CompanySharePopup({
                     <p className="mb-6 text-sm text-muted-light dark:text-muted-dark">
                         {summary}
                     </p>
-                    <button
-                        onClick={handleContinue}
-                        disabled={phase === 'working'}
-                        className="mb-6 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent/90 disabled:opacity-60"
-                    >
-                        {phase === 'working' ? workingLabel : continueLabel}
-                    </button>
+                    <div className="mb-6 flex items-center gap-2">
+                        <button
+                            onClick={handleContinue}
+                            disabled={phase === 'working'}
+                            className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent/90 disabled:opacity-60"
+                        >
+                            {phase === 'working' ? workingLabel : continueLabel}
+                        </button>
+                        <button
+                            onClick={handleCopyLink}
+                            className="flex items-center gap-1.5 rounded-md border border-border-light px-3 py-1.5 text-sm font-medium hover:bg-hover-light dark:border-border-dark dark:hover:bg-hover-dark"
+                        >
+                            {copied ? (
+                                <CheckIcon className="h-3.5 w-3.5" />
+                            ) : (
+                                <LinkIcon className="h-3.5 w-3.5" />
+                            )}
+                            {copied ? 'Copied!' : 'Copy link'}
+                        </button>
+                    </div>
                     <div className="flex flex-col gap-3">
                         {detail.workspaces.map((ws) => (
                             <WorkspaceSection key={ws.id} workspace={ws} />
@@ -143,19 +167,32 @@ export default function CompanySharePopup({
                                     ? "You've already pinned this company to your sidebar."
                                     : `${summary} was shared with you. Pin it to your sidebar?`}
                             </p>
-                            <div className="flex justify-end gap-2">
+                            <div className="flex items-center justify-between gap-2">
                                 <button
-                                    onClick={() => setPhase('declined')}
-                                    className="rounded-md border border-border-light px-3 py-1.5 text-sm font-medium hover:bg-hover-light dark:border-border-dark dark:hover:bg-hover-dark"
+                                    onClick={handleCopyLink}
+                                    className="flex items-center gap-1.5 rounded-md border border-border-light px-3 py-1.5 text-sm font-medium hover:bg-hover-light dark:border-border-dark dark:hover:bg-hover-dark"
                                 >
-                                    Not now
+                                    {copied ? (
+                                        <CheckIcon className="h-3.5 w-3.5" />
+                                    ) : (
+                                        <LinkIcon className="h-3.5 w-3.5" />
+                                    )}
+                                    {copied ? 'Copied!' : 'Copy link'}
                                 </button>
-                                <button
-                                    onClick={handleContinue}
-                                    className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent/90"
-                                >
-                                    {continueLabel}
-                                </button>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => setPhase('declined')}
+                                        className="rounded-md border border-border-light px-3 py-1.5 text-sm font-medium hover:bg-hover-light dark:border-border-dark dark:hover:bg-hover-dark"
+                                    >
+                                        Not now
+                                    </button>
+                                    <button
+                                        onClick={handleContinue}
+                                        className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent/90"
+                                    >
+                                        {continueLabel}
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>

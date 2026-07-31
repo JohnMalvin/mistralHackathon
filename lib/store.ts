@@ -54,6 +54,7 @@ interface Store extends WorkspaceState {
         content?: string,
     ) => string;
     updateBlock: (pageId: string, blockId: string, content: string) => void;
+    updateBlockRows: (pageId: string, blockId: string, rows: string[][]) => void;
     deleteBlock: (pageId: string, blockId: string) => void;
     changeBlockType: (pageId: string, blockId: string, type: BlockType) => void;
     toggleTodo: (pageId: string, blockId: string) => void;
@@ -65,6 +66,11 @@ interface Store extends WorkspaceState {
         position: 'before' | 'after',
     ) => void;
     setBlockColor: (pageId: string, blockId: string, color: string) => void;
+
+    // Wipes locally-cached pages/companies without touching UI prefs
+    // (darkMode, sidebarOpen) — call on login/register/logout so one
+    // account's data never bleeds into another on a shared browser.
+    resetWorkspace: () => void;
 }
 
 export const useStore = create<Store>()(
@@ -79,6 +85,14 @@ export const useStore = create<Store>()(
 
             toggleDarkMode: () => set((s) => ({ darkMode: !s.darkMode })),
             toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
+
+            resetWorkspace: () =>
+                set({
+                    pages: {},
+                    rootIds: [],
+                    lastOpenedId: null,
+                    dbPageMap: {},
+                }),
 
             createPage: (parentId = null, title = 'Untitled') => {
                 const page = makePage(parentId, title);
@@ -378,6 +392,25 @@ export const useStore = create<Store>()(
                     if (!page) return {};
                     const blocks = page.blocks.map((b) =>
                         b.id === blockId ? { ...b, content } : b,
+                    );
+                    return {
+                        pages: {
+                            ...s.pages,
+                            [pageId]: {
+                                ...page,
+                                blocks,
+                                updatedAt: Date.now(),
+                            },
+                        },
+                    };
+                }),
+
+            updateBlockRows: (pageId, blockId, rows) =>
+                set((s) => {
+                    const page = s.pages[pageId];
+                    if (!page) return {};
+                    const blocks = page.blocks.map((b) =>
+                        b.id === blockId ? { ...b, rows } : b,
                     );
                     return {
                         pages: {

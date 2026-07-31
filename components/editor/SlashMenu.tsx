@@ -61,6 +61,18 @@ const OPTIONS: {
     },
     { type: 'code', label: 'Code', desc: 'Monospaced code block', icon: '</>' },
     {
+        type: 'link',
+        label: 'Link button',
+        desc: 'Clickable button to an external URL',
+        icon: '🔗',
+    },
+    {
+        type: 'table',
+        label: 'Table',
+        desc: 'Simple rows and columns',
+        icon: '▦',
+    },
+    {
         type: 'divider',
         label: 'Divider',
         desc: 'Visually divide blocks',

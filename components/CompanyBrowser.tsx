@@ -133,8 +133,8 @@ export default function CompanyBrowser() {
         <div className="mx-auto max-w-2xl px-12 py-12">
             <h1 className="mb-1 text-2xl font-bold">Browse companies</h1>
             <p className="mb-6 text-sm text-muted-light dark:text-muted-dark">
-                Search by name, or paste a share link (or its id) to jump
-                straight to a company.
+                Search by name, or paste a share link to jump straight to a
+                company.
             </p>
 
             <div className="mb-6 flex items-center gap-2 rounded-md border border-border-light px-3 py-2 dark:border-border-dark">
