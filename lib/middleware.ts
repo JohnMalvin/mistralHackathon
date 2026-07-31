@@ -41,6 +41,7 @@ export async function middleware(request: NextRequest) {
   requestHeaders.set('x-user-id', payload.userId);
   requestHeaders.set('x-user-email', payload.email);
   requestHeaders.set('x-user-role', payload.role);
+  requestHeaders.set('x-user-account-type', payload.accountType ?? 'individual');
 
   return NextResponse.next({
     request: {

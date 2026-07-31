@@ -1,220 +1,280 @@
-// import Workspace from '@/components/Workspace';
-
-// export default function Home() {
-//     return <Workspace pageId={null} />;
-// }
-
 import Link from 'next/link';
-import {
-  Sparkles,
-  RefreshCw,
-  Layers,
-  Bot,
-  ArrowRight,
-  CheckCircle2,
-  Lock,
-  Kanban,
-} from 'lucide-react';
+
+// One indent level, mirrored from --step in the .gb block of globals.css.
+const STEP = 26;
+
+// A real slice of a Jira project, shown at the depth it lands at once the
+// board has been rebuilt as pages. The rows animate from flat (every key
+// hard against the left margin, the way a board hands them to you) to this
+// shape — the whole product in one gesture.
+const OUTLINE: {
+    key: string;
+    summary: string;
+    depth: number;
+    state: string;
+    parent?: boolean;
+}[] = [
+    { key: 'SC-101', summary: 'Checkout rewrite', depth: 0, state: 'Epic', parent: true },
+    { key: 'SC-118', summary: 'Card tokenization service', depth: 1, state: 'In progress', parent: true },
+    { key: 'SC-131', summary: 'Retry when 3-D Secure times out', depth: 2, state: 'In review' },
+    { key: 'SC-142', summary: 'Rotate vault keys without downtime', depth: 2, state: 'Backlog' },
+    { key: 'SC-119', summary: 'Guest checkout', depth: 1, state: 'In progress', parent: true },
+    { key: 'SC-127', summary: 'Address autofill from postcode', depth: 2, state: 'Done' },
+    { key: 'SC-102', summary: 'Refunds', depth: 0, state: 'Epic', parent: true },
+    { key: 'SC-121', summary: 'Partial refund API', depth: 1, state: 'Backlog' },
+    { key: 'SC-134', summary: 'Audit trail for every refund', depth: 1, state: 'Backlog' },
+];
+
+// Connect, restructure, ask is an actual order of operations — you cannot ask
+// before the tree exists — so the steps are numbered.
+const STEPS = [
+    {
+        n: '01',
+        name: 'Connect a board',
+        body: 'Paste a Jira board or issue link. Workspace AI reads the project with your credentials and pulls every issue, description, and status.',
+    },
+    {
+        n: '02',
+        name: 'Get the outline back',
+        body: 'Epics become parent pages. Stories and subtasks nest beneath them. Descriptions arrive as editable blocks, so you can write around the ticket instead of inside it.',
+    },
+    {
+        n: '03',
+        name: 'Ask across the tree',
+        body: 'Questions run against the whole workspace, not one page — Mistral Large answers with the issues, pages, and statuses underneath as context.',
+    },
+];
+
+function Listing() {
+    return (
+        <div className="gb-listing">
+            {/* Column heads, the way a printed report names its columns —
+                spacer and min-width mirror a row so they sit over them. */}
+            <div className="gb-line !min-h-0 border-b border-[var(--rule)] py-2">
+                <span className="w-2 shrink-0" />
+                <span className="gb-label min-w-[54px]">Key</span>
+                <span className="gb-label">Summary</span>
+                <span className="gb-label gb-state hidden sm:block">Status</span>
+            </div>
+
+            <ul>
+                {OUTLINE.map((row, i) => (
+                    <li
+                        key={row.key}
+                        className="gb-line"
+                        style={
+                            {
+                                '--x': `${row.depth * STEP}px`,
+                                '--d': `${260 + i * 55}ms`,
+                            } as React.CSSProperties
+                        }
+                    >
+                        {/* One hairline per level of ancestry. */}
+                        <span className="gb-guides" aria-hidden="true">
+                            {Array.from({ length: row.depth }).map((_, g) => (
+                                <span
+                                    key={g}
+                                    className="gb-guide"
+                                    style={
+                                        {
+                                            '--d': `${260 + i * 55}ms`,
+                                        } as React.CSSProperties
+                                    }
+                                />
+                            ))}
+                        </span>
+
+                        <span className="gb-shift">
+                            <span
+                                className={`gb-toggle${row.parent ? ' gb-caret' : ''}`}
+                                aria-hidden="true"
+                            />
+                            <span className="gb-key">{row.key}</span>
+                            <span className="gb-summary">{row.summary}</span>
+                        </span>
+
+                        {/* Outside .gb-shift — the status column holds the
+                            right edge while the rest of the row indents. */}
+                        <span className="gb-label gb-state hidden sm:block">
+                            {row.state}
+                        </span>
+                    </li>
+                ))}
+            </ul>
+        </div>
+    );
+}
 
 export default function LandingPage() {
-  return (
-    <div className="min-h-screen bg-[#121212] font-sans text-zinc-100 selection:bg-blue-600 selection:text-white">
-      {/* 1. NAVIGATION BAR */}
-      <nav className="fixed top-0 z-40 w-full border-b border-zinc-800/80 bg-[#121212]/80 backdrop-blur-md">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600">
-              <Sparkles className="h-4 w-4 text-white" />
-            </div>
-            <span className="text-lg font-bold tracking-tight text-white">
-              Workspace AI
-            </span>
-          </div>
+    return (
+        <div className="gb min-h-screen">
+            {/* MASTHEAD */}
+            <header className="mx-auto flex max-w-[1120px] items-baseline justify-between gap-6 px-6 py-6">
+                <Link href="/" className="flex items-baseline gap-2.5">
+                    <span className="gb-display text-[19px] uppercase">
+                        Workspace AI
+                    </span>
+                    <span className="gb-label hidden sm:block">
+                        Jira → pages
+                    </span>
+                </Link>
 
-          <div className="hidden items-center gap-8 text-sm text-zinc-400 md:flex">
-            <a href="#features" className="transition-colors hover:text-white">
-              Features
-            </a>
-            <a href="#workflow" className="transition-colors hover:text-white">
-              Workflow
-            </a>
-            <a href="#pricing" className="transition-colors hover:text-white">
-              Pricing
-            </a>
-          </div>
+                <nav className="flex items-baseline gap-6 text-sm">
+                    <a
+                        href="#how"
+                        className="hidden text-[var(--ink)]/70 underline-offset-4 hover:text-[var(--ink)] hover:underline sm:block"
+                    >
+                        How it works
+                    </a>
+                    <Link
+                        href="/login"
+                        className="text-[var(--ink)]/70 underline-offset-4 hover:text-[var(--ink)] hover:underline"
+                    >
+                        Sign in
+                    </Link>
+                    <Link
+                        href="/register"
+                        className="bg-[var(--ribbon)] px-3.5 py-2 text-sm font-medium text-[var(--paper)] transition-opacity hover:opacity-90"
+                    >
+                        Create account
+                    </Link>
+                </nav>
+            </header>
 
-          <div className="flex items-center gap-3">
-            <Link
-              href="/login"
-              className="rounded-lg px-4 py-2 text-sm font-medium text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
-            >
-              Sign In
-            </Link>
-            <Link
-              href="/register"
-              className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-blue-600/20 transition-all hover:bg-blue-500"
-            >
-              Get Started
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
-        </div>
-      </nav>
+            <hr className="gb-rule" />
 
-      {/* 2. HERO SECTION */}
-      <section className="relative overflow-hidden pt-36 pb-20">
-        {/* Glowing Background Gradients */}
-        <div className="pointer-events-none absolute left-1/2 top-10 -z-10 h-[400px] w-[600px] -translate-x-1/2 rounded-full bg-blue-600/10 blur-[120px]" />
+            {/* HERO — the headline states the thesis, the listing proves it */}
+            <main>
+                <section className="mx-auto max-w-[1120px] px-6 pb-12 pt-16 sm:pt-24">
+                    <p className="gb-label mb-6">
+                        Live example — Jira project SC
+                    </p>
 
-        <div className="mx-auto max-w-5xl px-6 text-center">
-          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-blue-500/30 bg-blue-500/10 px-3.5 py-1.5 text-xs font-medium text-blue-400">
-            <Sparkles className="h-3.5 w-3.5" />
-            <span>Powered by Mistral AI & Jira Connector</span>
-          </div>
+                    <h1 className="gb-display max-w-[15ch] text-[clamp(2.6rem,8vw,5.4rem)]">
+                        A backlog is a document that lost its outline.
+                    </h1>
 
-            <h1 className="text-4xl font-extrabold tracking-tight text-white sm:text-6xl sm:leading-[1.15]">
-                Your Notion Workspace <br />
-                <span className="bg-gradient-to-r from-blue-500 via-sky-400 to-teal-300 bg-clip-text text-transparent">
-                    Synced with Live Jira Intelligence
+                    <p className="mt-7 max-w-[52ch] text-[17px] leading-relaxed text-[var(--ink)]/80">
+                        Workspace AI reads your Jira project and gives the
+                        outline back — epics as parent pages, everything else
+                        nested underneath, every issue still carrying its key.
+                    </p>
+
+                    <div className="mt-9 flex flex-wrap items-center gap-x-7 gap-y-4">
+                        <Link
+                            href="/register"
+                            className="bg-[var(--ribbon)] px-6 py-3.5 font-medium text-[var(--paper)] transition-opacity hover:opacity-90"
+                        >
+                            Create account
+                        </Link>
+                        <a
+                            href="#how"
+                            className="text-[var(--ink)]/75 underline underline-offset-4 hover:text-[var(--ink)]"
+                        >
+                            See how it works
+                        </a>
+                    </div>
+                </section>
+
+                <section className="mx-auto max-w-[1120px] px-6 pb-20">
+                    <Listing />
+                    <p className="mt-4 max-w-[60ch] text-sm text-[var(--ink)]/60">
+                        Nine issues from project SC. Nothing here was rewritten
+                        — the rows only found their parents.
+                    </p>
+                </section>
+
+                <hr className="gb-rule" />
+
+                {/* THREE MOVES */}
+                <section id="how" className="mx-auto max-w-[1120px] px-6 py-20">
+                    <h2 className="gb-display mb-10 text-[clamp(1.7rem,3.4vw,2.5rem)]">
+                        Three moves, in order
+                    </h2>
+
+                    <div className="gb-listing">
+                        {STEPS.map((step) => (
+                            <div
+                                key={step.n}
+                                className="gb-line !items-start gap-x-6 py-6 sm:gap-x-10"
+                            >
+                                <span className="gb-label mt-1 w-6 shrink-0 !text-[var(--stamp)]">
+                                    {step.n}
+                                </span>
+                                <div className="grid flex-1 gap-2 sm:grid-cols-[15rem_1fr] sm:gap-8">
+                                    <h3 className="gb-display text-[19px] leading-snug">
+                                        {step.name}
+                                    </h3>
+                                    <p className="max-w-[58ch] text-[15px] leading-relaxed text-[var(--ink)]/75">
+                                        {step.body}
+                                    </p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </section>
+
+                <hr className="gb-rule" />
+
+                {/* TWO WAYS IN — mirrors the two account types on /register */}
+                <section className="mx-auto max-w-[1120px] px-6 py-20">
+                    <h2 className="gb-display mb-3 text-[clamp(1.7rem,3.4vw,2.5rem)]">
+                        Two ways to sign up
+                    </h2>
+                    <p className="mb-10 max-w-[52ch] text-[15px] text-[var(--ink)]/70">
+                        Pick the one that matches how you work. You choose it
+                        when you create your account.
+                    </p>
+
+                    <div className="grid gap-px border border-[var(--rule)] bg-[var(--rule)] sm:grid-cols-2">
+                        <div className="bg-[var(--paper)] p-8">
+                            <p className="gb-label mb-4">Individual</p>
+                            <h3 className="gb-display mb-3 text-2xl">
+                                Your own boards
+                            </h3>
+                            <p className="mb-6 max-w-[38ch] text-[15px] leading-relaxed text-[var(--ink)]/75">
+                                One person, one workspace. Import the projects
+                                you work on and keep your notes beside them.
+                            </p>
+                            <Link
+                                href="/register"
+                                className="gb-mono text-sm text-[var(--ribbon)] underline underline-offset-4"
+                            >
+                                Create an individual account
+                            </Link>
+                        </div>
+
+                        <div className="bg-[var(--bar)] p-8">
+                            <p className="gb-label mb-4">Business</p>
+                            <h3 className="gb-display mb-3 text-2xl">
+                                Your whole company
+                            </h3>
+                            <p className="mb-6 max-w-[38ch] text-[15px] leading-relaxed text-[var(--ink)]/75">
+                                Register under a company name, then share a
+                                workspace by link so everyone reads the same
+                                tree.
+                            </p>
+                            <Link
+                                href="/register?type=business"
+                                className="gb-mono text-sm text-[var(--ribbon)] underline underline-offset-4"
+                            >
+                                Create a business account
+                            </Link>
+                        </div>
+                    </div>
+                </section>
+            </main>
+
+            <hr className="gb-rule" />
+
+            <footer className="mx-auto flex max-w-[1120px] flex-col gap-4 px-6 py-10 sm:flex-row sm:items-baseline sm:justify-between">
+                <span className="gb-display text-[15px] uppercase">
+                    Workspace AI
                 </span>
-            </h1>
-
-          <p className="mx-auto mt-6 max-w-2xl text-base text-zinc-400 sm:text-lg">
-            Organize pages, extract sprint deliverables, and ask AI contextual
-            questions across your whole project—all in one unified workspace.
-          </p>
-
-          <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
-            <Link
-              href="/register"
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-3.5 text-sm font-semibold text-white shadow-xl shadow-blue-600/25 transition-all hover:bg-blue-500 sm:w-auto"
-            >
-              Start Free Trial
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-            <a
-              href="#features"
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/60 px-6 py-3.5 text-sm font-medium text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white sm:w-auto"
-            >
-              Explore Features
-            </a>
-          </div>
-
-          {/* APP PREVIEW CARD */}
-          <div className="mt-16 rounded-2xl border border-zinc-800/80 bg-[#191919] p-3 shadow-2xl shadow-black/80">
-            <div className="flex items-center gap-2 border-b border-zinc-800/80 px-4 py-2.5">
-              <div className="flex gap-1.5">
-                <div className="h-3 w-3 rounded-full bg-red-500/80" />
-                <div className="h-3 w-3 rounded-full bg-yellow-500/80" />
-                <div className="h-3 w-3 rounded-full bg-green-500/80" />
-              </div>
-              <div className="mx-auto rounded-md bg-zinc-900 px-4 py-1 text-xs text-zinc-500">
-                app.workspace.ai/projects
-              </div>
-            </div>
-            <div className="relative aspect-[16/9] w-full overflow-hidden rounded-xl bg-zinc-950 p-6 text-left">
-              <div className="flex h-full gap-6">
-                {/* Simulated Sidebar */}
-                <div className="w-1/4 rounded-lg border border-zinc-800 bg-[#191919] p-3 text-xs text-zinc-400">
-                  <div className="mb-3 font-semibold text-zinc-200">WORKSPACE</div>
-                  <div className="space-y-2">
-                    <div className="rounded bg-blue-600/20 px-2 py-1.5 text-blue-400">
-                      🚀 Active Sprints
-                    </div>
-                    <div className="px-2 py-1.5 hover:text-zinc-200">
-                      📄 Technical Roadmap
-                    </div>
-                    <div className="px-2 py-1.5 hover:text-zinc-200">
-                      🛠️ Debt Backlog
-                    </div>
-                  </div>
-                </div>
-                {/* Simulated Content */}
-                <div className="flex-1 space-y-4">
-                  <div className="h-8 w-2/5 rounded bg-zinc-800" />
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="h-24 rounded border border-zinc-800/80 bg-zinc-900 p-3">
-                      <div className="h-4 w-1/2 rounded bg-zinc-800" />
-                      <div className="mt-3 h-3 w-4/5 rounded bg-zinc-800/50" />
-                    </div>
-                    <div className="h-24 rounded border border-zinc-800/80 bg-zinc-900 p-3">
-                      <div className="h-4 w-1/2 rounded bg-zinc-800" />
-                      <div className="mt-3 h-3 w-4/5 rounded bg-zinc-800/50" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+                <p className="gb-label !tracking-[0.1em]">
+                    Jira import · Mistral Large · {new Date().getFullYear()}
+                </p>
+            </footer>
         </div>
-      </section>
-
-      {/* 3. FEATURE HIGHLIGHTS */}
-      <section id="features" className="border-t border-zinc-800/80 py-20">
-        <div className="mx-auto max-w-6xl px-6">
-          <div className="text-center">
-            <h2 className="text-2xl font-bold text-white sm:text-3xl">
-              Engineered for Modern Engineering Teams
-            </h2>
-            <p className="mt-2 text-sm text-zinc-400">
-              Everything you need to sync workspace notes with live Jira issue tracking.
-            </p>
-          </div>
-
-          <div className="mt-14 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
-            {/* Feature 1 */}
-            <div className="rounded-xl border border-zinc-800/80 bg-[#191919] p-6 transition-all hover:border-zinc-700">
-              <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600/10 text-blue-400">
-                <RefreshCw className="h-5 w-5" />
-              </div>
-              <h3 className="text-lg font-semibold text-white">Automated Jira Sync</h3>
-              <p className="mt-2 text-sm text-zinc-400">
-                One-click synchronization extracts Jira sprints, technical debt, and
-                tasks into structured pages.
-              </p>
-            </div>
-
-            {/* Feature 2 */}
-            <div className="rounded-xl border border-zinc-800/80 bg-[#191919] p-6 transition-all hover:border-zinc-700">
-              <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-purple-600/10 text-purple-400">
-                <Bot className="h-5 w-5" />
-              </div>
-              <h3 className="text-lg font-semibold text-white">Context-Aware AI Assistant</h3>
-              <p className="mt-2 text-sm text-zinc-400">
-                Docked bottom-right chat widget that answers questions using your live
-                workspace data.
-              </p>
-            </div>
-
-            {/* Feature 3 */}
-            <div className="rounded-xl border border-zinc-800/80 bg-[#191919] p-6 transition-all hover:border-zinc-700">
-              <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-600/10 text-emerald-400">
-                <Layers className="h-5 w-5" />
-              </div>
-              <h3 className="text-lg font-semibold text-white">Multi-Page Hierarchy</h3>
-              <p className="mt-2 text-sm text-zinc-400">
-                Projects split seamlessly into pages, allowing modular organization for
-                every release cycle.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* 4. CTA FOOTER */}
-      <footer className="border-t border-zinc-800/80 py-12 text-center text-xs text-zinc-500">
-        <div className="mx-auto max-w-5xl px-6 flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2 text-zinc-300 font-semibold">
-            <Sparkles className="h-4 w-4 text-blue-500" />
-            Workspace AI
-          </div>
-          <p>© {new Date().getFullYear()} Workspace AI. All rights reserved.</p>
-          <div className="flex gap-6 text-zinc-400">
-            <a href="#" className="hover:text-white">Privacy Policy</a>
-            <a href="#" className="hover:text-white">Terms of Service</a>
-          </div>
-        </div>
-      </footer>
-    </div>
-  );
+    );
 }

@@ -1,5 +1,6 @@
 // lib/auth.ts
 import { SignJWT, jwtVerify } from 'jose';
+import type { AccountType } from '@/models/User';
 
 const SECRET_KEY = new TextEncoder().encode(
   process.env.JWT_SECRET || 'your-fallback-super-secret-key-change-this'
@@ -9,6 +10,9 @@ export interface TokenPayload {
   userId: string;
   email: string;
   role: string;
+  // 'individual' | 'business'. Tokens issued before account types existed
+  // have no value here, so treat a missing one as 'individual'.
+  accountType: AccountType;
 }
 
 /**
