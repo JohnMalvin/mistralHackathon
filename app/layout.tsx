@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
 import "@/styles/globals.css";
-import AIChatBox from "@/components/AIChatBox";
 
 export const metadata: Metadata = {
-    title: 'Notion Clone',
+    title: 'SPACE',
     description: 'A Notion-style workspace built with Next.js and Tailwind',
 };
 
@@ -16,7 +15,6 @@ export default function RootLayout({
     <html lang="en">
       <body>
         {children}
-        <AIChatBox />
       </body>
     </html>
   );
