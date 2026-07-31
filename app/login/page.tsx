@@ -39,8 +39,8 @@ export default function LoginPage() {
         throw new Error(data.error || 'Invalid email or password');
       }
 
-      // Redirect user directly to authenticated workspace dashboard
-      router.push('/dashboard');
+      // Redirect user directly to authenticated workspace page where they search for the companies
+      router.push('/companies');
     } catch (err: any) {
       setError(err.message);
     } finally {
