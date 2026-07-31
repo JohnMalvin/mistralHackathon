@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/mongodb';
-import { JiraContext } from '@/models/JiraContext';
+import { Project } from '@/models/Project';
+import { Page } from '@/models/Page';
 
-export async function POST() {
+export async function POST(req: Request) {
   try {
     const connectorId =
       process.env.MISTRAL_ATLASSIAN_CONNECTOR_ID || '0198e70f-57b0-77f6-a752-0a7f5ea2da35';
 
-    // 1. Trigger Mistral AI with the Atlassian Connector
+    // 1. Fetch structured workspace data from Mistral AI
     const mistralResponse = await fetch('https://api.mistral.ai/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -20,37 +21,40 @@ export async function POST() {
         messages: [
           {
             role: 'system',
-            content: `You are an executive documentation assistant.
-Fetch the latest issues, tasks, and epics across the connected Atlassian workspace using the provided connector.
+            content: `You are a project management assistant. Extract tasks and workspace updates using the connected Jira tool and structure them into a high-level project and multiple distinct sub-pages (e.g., Sprints, Deliverables, Technical Spec).
 
-RULES:
-1. Search across all active projects/issues in the connected Jira workspace.
-2. Eliminate all developer technical jargon (e.g., commit hashes, PRs, specific refactoring terms) and rewrite everything in clean, plain business English.
-3. Return strictly valid JSON with this structure:
+Output MUST be strictly valid JSON matching this schema:
 {
-  "executiveSummary": "Overall status summary of active workspace progress",
-  "lastSynced": "ISO timestamp",
-  "tickets": [
+  "projectName": "Name of the Jira Workspace or Main Project",
+  "jiraProjectKey": "PROJ",
+  "pages": [
     {
-      "id": "JIRA-101",
-      "simpleTitle": "Non-technical feature title",
-      "status": "In Progress | Done | To Do",
-      "simpleDescription": "Clean explanation of what was built and why it matters"
+      "title": "Page Title (e.g., Sprint 1 Overview)",
+      "slug": "sprint-1-overview",
+      "content": {
+        "summary": "Brief summary of this sprint or page...",
+        "tickets": [
+          {
+            "id": "PROJ-101",
+            "title": "Task title",
+            "status": "In Progress",
+            "assignee": "Person Name"
+          }
+        ]
+      }
     }
   ]
 }`,
           },
           {
             role: 'user',
-            content: 'Sync and simplify all recent Jira workspace updates.',
+            content: 'Fetch and organize current Jira workspace issues into projects and pages.',
           },
         ],
         tools: [
           {
             type: 'connector',
-            connector: {
-              id: connectorId,
-            },
+            connector: { id: connectorId },
           },
         ],
       }),
@@ -58,9 +62,8 @@ RULES:
 
     if (!mistralResponse.ok) {
       const errorText = await mistralResponse.text();
-      console.error('Mistral Connector Error:', errorText);
       return NextResponse.json(
-        { error: 'Failed to retrieve Jira data from Mistral connector' },
+        { error: `Mistral Connector Error: ${errorText}` },
         { status: mistralResponse.status }
       );
     }
@@ -69,48 +72,62 @@ RULES:
     const rawContent = mistralData.choices?.[0]?.message?.content;
 
     if (!rawContent) {
+      return NextResponse.json({ error: 'Empty AI response' }, { status: 502 });
+    }
+
+    const parsedData = JSON.parse(rawContent);
+
+    if (!parsedData.projectName || !Array.isArray(parsedData.pages)) {
       return NextResponse.json(
-        { error: 'Empty response returned from AI connector' },
-        { status: 502 }
+        { error: 'Invalid payload structure returned from AI' },
+        { status: 422 }
       );
     }
 
-    // 2. Parse output JSON safely
-    let parsedJiraData;
-    try {
-      parsedJiraData = JSON.parse(rawContent);
-    } catch (parseError) {
-      console.error('Failed to parse AI output into JSON:', rawContent);
-      return NextResponse.json(
-        { error: 'AI output failed JSON parsing' },
-        { status: 500 }
-      );
-    }
-
-    // 3. Connect & save/overwrite the single JiraContext document
+    // 2. Connect to MongoDB
     await connectToDatabase();
 
-    // Use findOneAndUpdate with an empty filter `{}` to ensure single-document storage
-    const updatedContext = await JiraContext.findOneAndUpdate(
-      {},
+    // 3. Upsert the primary Project document
+    const project = await Project.findOneAndUpdate(
+      { name: parsedData.projectName },
       {
-        jiraData: parsedJiraData,
+        name: parsedData.projectName,
+        jiraProjectKey: parsedData.jiraProjectKey || '',
         updatedAt: new Date(),
       },
       { upsert: true, new: true }
     );
 
+    // 4. Upsert each child Page under this Project ID
+    const pageOperations = parsedData.pages.map((pageData: any) =>
+      Page.findOneAndUpdate(
+        { projectId: project._id, slug: pageData.slug },
+        {
+          projectId: project._id,
+          title: pageData.title,
+          slug: pageData.slug,
+          content: pageData.content,
+          updatedAt: new Date(),
+        },
+        { upsert: true, new: true }
+      )
+    );
+
+    const savedPages = await Promise.all(pageOperations);
+
     return NextResponse.json(
       {
-        message: 'Jira workspace successfully synced and saved.',
-        data: updatedContext.jiraData,
+        message: 'Jira workspace successfully synced to projects and pages.',
+        project,
+        pagesCount: savedPages.length,
+        pages: savedPages,
       },
       { status: 200 }
     );
   } catch (error) {
-    console.error('Sync API Error:', error);
+    console.error('Jira Sync Error:', error);
     return NextResponse.json(
-      { error: 'Internal Server Error' },
+      { error: 'Internal Server Error during Jira sync' },
       { status: 500 }
     );
   }

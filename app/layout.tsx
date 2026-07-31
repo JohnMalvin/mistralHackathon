@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import AIChatBox from "@/components/AIChatBox";
 
 export const metadata: Metadata = {
   title: "Notion Clone",
@@ -13,7 +14,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        {children}
+        <AIChatBox />
+      </body>
     </html>
   );
 }

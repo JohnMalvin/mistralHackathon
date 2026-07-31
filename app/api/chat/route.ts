@@ -1,34 +1,40 @@
-import { NextRequest } from 'next/server';
 import { connectToDatabase } from '@/lib/mongodb';
-import { JiraContext } from '@/models/JiraContext';
-import { ChatSession } from '@/models/ChatSession';
+import { Project } from '@/models/Project';
+import { Page } from '@/models/Page';
+import { ChatSession } from '@/models/ChatSession'; // Adjust import paths to match your project
 
-// ----------------------------------------------------------------------
-// GET: Load chat history for a given session
-// ----------------------------------------------------------------------
-export async function GET(req: NextRequest) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const sessionId = searchParams.get('sessionId');
+/**
+ * Reconstructs the workspace context from MongoDB by fetching
+ * the parent Project and merging all child Pages into clean Markdown.
+ */
+async function getReconstructedJiraContext(projectId?: string) {
+  await connectToDatabase();
 
-    if (!sessionId) {
-      return new Response('Missing sessionId parameter', { status: 400 });
-    }
+  // 1. Fetch Project (by ID or fallback to the most recently updated project)
+  const project = projectId
+    ? await Project.findById(projectId).lean()
+    : await Project.findOne().sort({ updatedAt: -1 }).lean();
 
-    await connectToDatabase();
+  if (!project) return 'No Jira context found in database.';
 
-    const session = await ChatSession.findOne({ sessionId }, { _id: 0, messages: 1 }).lean();
+  // 2. Fetch all Pages belonging to this Project
+  const pages = await Page.find({ projectId: project._id }).lean();
 
-    return Response.json({ messages: session?.messages || [] });
-  } catch (error) {
-    console.error('GET Chat Error:', error);
-    return new Response('Internal Server Error', { status: 500 });
-  }
+  // 3. Format into a unified Markdown string
+  const projectHeader = `# Project: ${project.name} (Key: ${project.jiraProjectKey || 'N/A'})\n\n`;
+
+  const pagesContent = pages
+    .map(
+      (p: any) => `## Page: ${p.title}\n${JSON.stringify(p.content, null, 2)}`
+    )
+    .join('\n\n---\n\n');
+
+  return `${projectHeader}${pagesContent}`;
 }
 
 export async function POST(req: Request) {
   try {
-    const { message, sessionId } = await req.json();
+    const { message, sessionId, projectId } = await req.json();
 
     if (!message || !sessionId) {
       return new Response('Missing message or sessionId parameter', { status: 400 });
@@ -36,14 +42,8 @@ export async function POST(req: Request) {
 
     await connectToDatabase();
 
-    // 1. Fetch single Jira context document
-    const contextDoc = await JiraContext.findOne({}, { jiraData: 1, _id: 0 }).lean();
-
-    const jiraMarkdownContext = contextDoc?.jiraData
-      ? typeof contextDoc.jiraData === 'string'
-        ? contextDoc.jiraData
-        : JSON.stringify(contextDoc.jiraData)
-      : 'No Jira context found.';
+    // 1. Reconstruct full workspace context from DB (Projects + Pages)
+    const reconstructedContext = await getReconstructedJiraContext(projectId);
 
     // 2. Load or initialize chat session
     let chatSession = await ChatSession.findOne({ sessionId });
@@ -55,7 +55,7 @@ export async function POST(req: Request) {
       });
     }
 
-    // Append and IMMEDIATELY SAVE user message to prevent message loss
+    // Append and IMMEDIATELY SAVE user message to prevent data loss if stream breaks
     chatSession.messages.push({ role: 'user', content: message });
     await chatSession.save();
 
@@ -68,12 +68,12 @@ export async function POST(req: Request) {
     const apiMessages = [
       {
         role: 'system',
-        content: `You are an AI assistant for project management updates.\n\nContext Jira Documentation:\n${jiraMarkdownContext}`,
+        content: `You are an AI assistant for project management updates. Use the provided Jira workspace documentation (Project details and Sprint/Technical pages) to accurately answer user queries.\n\nContext Documentation:\n${reconstructedContext}`,
       },
       ...formattedHistory,
     ];
 
-    // 3. Call Mistral AI API
+    // 3. Request streaming response from Mistral AI API
     const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -135,7 +135,7 @@ export async function POST(req: Request) {
           }
         }
 
-        // Push assistant reply to DB when streaming completes
+        // Atomic push to update assistant response in MongoDB upon completion
         if (accumulatedAssistantResponse) {
           try {
             await ChatSession.updateOne(
@@ -151,7 +151,7 @@ export async function POST(req: Request) {
               }
             );
           } catch (dbErr) {
-            console.error('Failed to save assistant response:', dbErr);
+            console.error('Failed to save assistant response to DB:', dbErr);
           }
         }
 
