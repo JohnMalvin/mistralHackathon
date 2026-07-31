@@ -1,19 +1,19 @@
-import type { Metadata } from "next";
-import "./globals.css";
+import type { Metadata } from 'next';
+import '@/styles/globals.css';
 
 export const metadata: Metadata = {
-  title: "Notion Clone",
-  description: "A Notion-style workspace built with Next.js and Tailwind",
+    title: 'Notion Clone',
+    description: 'A Notion-style workspace built with Next.js and Tailwind',
 };
 
 export default function RootLayout({
-  children,
+    children,
 }: {
-  children: React.ReactNode;
+    children: React.ReactNode;
 }) {
-  return (
-    <html lang="en">
-      <body>{children}</body>
-    </html>
-  );
+    return (
+        <html lang="en">
+            <body>{children}</body>
+        </html>
+    );
 }
