@@ -40,7 +40,7 @@ export default function LoginPage() {
       }
 
       // Redirect user directly to authenticated workspace dashboard
-      router.push('/dashboard');
+      router.push('/companies');
     } catch (err: any) {
       setError(err.message);
     } finally {
