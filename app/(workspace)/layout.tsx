@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useStore, seedWorkspaceIfEmpty } from '@/lib/store';
 import Sidebar from '@/components/sidebar/Sidebar';
 import { ChevronsLeftIcon } from '@/components/ui/Icons';
+import AIChatBox from '@/components/AIChatBox';
 
 export default function WorkspaceLayout({
     children,
@@ -32,6 +33,7 @@ export default function WorkspaceLayout({
                 {mounted && sidebarOpen && (
                     <Sidebar activePageId={activePageId} />
                 )}
+
                 {mounted && !sidebarOpen && (
                     <button
                         onClick={toggleSidebar}
@@ -41,9 +43,13 @@ export default function WorkspaceLayout({
                         <ChevronsLeftIcon className="h-4 w-4 rotate-180" />
                     </button>
                 )}
+
                 <main className="relative flex-1 overflow-y-auto scrollbar-thin">
                     {mounted ? children : null}
                 </main>
+
+                {/* Authorized Workspace Only: Ask AI Floating Interface */}
+                {mounted && <AIChatBox />}
             </div>
         </div>
     );

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/lib/store';
 import PageTreeItem from '@/components/sidebar/PageTreeItem';
@@ -13,6 +13,7 @@ import {
     SunIcon,
     MoonIcon,
 } from '@/components/ui/Icons';
+import { ChevronDown, RefreshCw, LogOut, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 
 export default function Sidebar({
     activePageId,
@@ -27,6 +28,62 @@ export default function Sidebar({
     const darkMode = useStore((s) => s.darkMode);
     const toggleDarkMode = useStore((s) => s.toggleDarkMode);
     const [query, setQuery] = useState('');
+
+    // Dropdown & Action states for Workspace Header
+    const [isWorkspaceMenuOpen, setIsWorkspaceMenuOpen] = useState(false);
+    const [syncing, setSyncing] = useState(false);
+    const [logoutLoading, setLogoutLoading] = useState(false);
+    const [syncStatus, setSyncStatus] = useState<'idle' | 'success' | 'error'>('idle');
+    const menuRef = useRef<HTMLDivElement>(null);
+
+    // Close menu when clicking outside
+    useEffect(() => {
+        function handleClickOutside(event: MouseEvent) {
+            if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+                setIsWorkspaceMenuOpen(false);
+            }
+        }
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const handleSyncJira = async () => {
+        setSyncing(true);
+        setSyncStatus('idle');
+        try {
+            const res = await fetch('/api/sync-jira', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+            });
+            if (!res.ok) throw new Error('Sync failed');
+            setSyncStatus('success');
+            router.refresh();
+        } catch (error) {
+            console.error('Jira sync error:', error);
+            setSyncStatus('error');
+        } finally {
+            setSyncing(false);
+            setTimeout(() => setSyncStatus('idle'), 3000);
+        }
+    };
+
+    const handleLogout = async () => {
+        setLogoutLoading(true);
+        try {
+            const res = await fetch('/api/auth/logout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+            });
+            if (res.ok) {
+                router.push('/login');
+                router.refresh();
+            }
+        } catch (error) {
+            console.error('Logout error:', error);
+        } finally {
+            setLogoutLoading(false);
+        }
+    };
 
     const favorites = useMemo(
         () => Object.values(pages).filter((p) => p.isFavorite && !p.isDeleted),
@@ -52,23 +109,68 @@ export default function Sidebar({
 
     return (
         <aside className="flex h-full w-64 shrink-0 flex-col border-r border-border-light bg-sidebar-light dark:border-border-dark dark:bg-sidebar-dark">
-            <div className="flex items-center justify-between px-3 pt-3">
+            {/* Interactive Workspace Header & Dropdown */}
+            <div className="relative flex items-center justify-between px-3 pt-3" ref={menuRef}>
                 <button
-                    className="flex min-w-0 items-center gap-1.5 rounded px-1.5 py-1 text-sm font-medium hover:bg-hover-light dark:hover:bg-hover-dark"
+                    onClick={() => setIsWorkspaceMenuOpen(!isWorkspaceMenuOpen)}
+                    className="flex flex-1 min-w-0 items-center justify-between rounded px-1.5 py-1 text-sm font-medium hover:bg-hover-light dark:hover:bg-hover-dark"
                     title="Workspace"
                 >
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-accent text-[11px] font-semibold text-white">
-                        N
-                    </span>
-                    <span className="truncate">My Workspace</span>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-accent text-[11px] font-semibold text-white">
+                            N
+                        </span>
+                        <span className="truncate">My Workspace</span>
+                    </div>
+                    <ChevronDown
+                        className={`h-3.5 w-3.5 shrink-0 text-muted-light transition-transform duration-200 dark:text-muted-dark ${
+                            isWorkspaceMenuOpen ? 'rotate-180' : ''
+                        }`}
+                    />
                 </button>
+
                 <button
                     onClick={toggleSidebar}
-                    className="rounded p-1 text-muted-light hover:bg-hover-light hover:text-ink-light dark:text-muted-dark dark:hover:bg-hover-dark dark:hover:text-ink-dark"
+                    className="ml-1 rounded p-1 text-muted-light hover:bg-hover-light hover:text-ink-light dark:text-muted-dark dark:hover:bg-hover-dark dark:hover:text-ink-dark"
                     title="Collapse sidebar"
                 >
                     <ChevronsLeftIcon className="h-4 w-4" />
                 </button>
+
+                {/* Dropdown Menu */}
+                {isWorkspaceMenuOpen && (
+                    <div className="absolute left-3 top-full z-50 mt-1 w-56 rounded-lg border border-border-light bg-sidebar-light p-1 shadow-lg dark:border-border-dark dark:bg-sidebar-dark">
+                        <div className="px-2 py-1 text-[10px] font-semibold tracking-wider text-muted-light uppercase dark:text-muted-dark">
+                            Workspace Actions
+                        </div>
+
+                        {/* Sync Jira */}
+                        <button
+                            onClick={handleSyncJira}
+                            disabled={syncing}
+                            className="flex w-full items-center justify-between rounded px-2 py-1.5 text-xs font-medium text-ink-light transition-colors hover:bg-hover-light dark:text-ink-dark dark:hover:bg-hover-dark disabled:opacity-50"
+                        >
+                            <div className="flex items-center gap-2">
+                                <RefreshCw className={`h-3.5 w-3.5 text-sky-500 ${syncing ? 'animate-spin' : ''}`} />
+                                <span>{syncing ? 'Syncing Jira...' : 'Sync Jira Workspace'}</span>
+                            </div>
+                            {syncStatus === 'success' && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />}
+                            {syncStatus === 'error' && <AlertCircle className="h-3.5 w-3.5 text-red-500" />}
+                        </button>
+
+                        <div className="my-1 border-t border-border-light dark:border-border-dark" />
+
+                        {/* Logout */}
+                        <button
+                            onClick={handleLogout}
+                            disabled={logoutLoading}
+                            className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs font-medium text-red-500 transition-colors hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-50"
+                        >
+                            {logoutLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogOut className="h-3.5 w-3.5" />}
+                            <span>{logoutLoading ? 'Logging out...' : 'Log out'}</span>
+                        </button>
+                    </div>
+                )}
             </div>
 
             <div className="mt-2 px-3">
