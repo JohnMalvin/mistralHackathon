@@ -13,6 +13,8 @@ import {
     SunIcon,
     MoonIcon,
     LinkIcon,
+    CheckIcon,
+    CopyIcon,
 } from '@/components/ui/Icons';
 import { ChevronDown, RefreshCw, LogOut, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 
@@ -33,14 +35,21 @@ export default function Sidebar({
 
     // Company-owning accounts get "Import from Jira" (bring more data into
     // their company); plain accounts get "Browse companies" (find one to
-    // join/pin) instead — never both.
+    // join/pin) instead — never both. companyId also powers the always-
+    // available "Copy link" button below, so the share link isn't only
+    // reachable from the one-time post-registration screen.
     const [hasCompany, setHasCompany] = useState<boolean | null>(null);
+    const [companyId, setCompanyId] = useState<string | null>(null);
+    const [linkCopied, setLinkCopied] = useState(false);
     useEffect(() => {
         let cancelled = false;
         fetch('/api/companies/mine')
-            .then((res) => (res.ok ? res.json() : { hasCompany: false }))
+            .then((res) => (res.ok ? res.json() : { hasCompany: false, companyId: null }))
             .then((data) => {
-                if (!cancelled) setHasCompany(!!data.hasCompany);
+                if (!cancelled) {
+                    setHasCompany(!!data.hasCompany);
+                    setCompanyId(data.companyId ?? null);
+                }
             })
             .catch(() => {
                 if (!cancelled) setHasCompany(false);
@@ -67,6 +76,19 @@ export default function Sidebar({
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
+
+    const handleCopyCompanyLink = async () => {
+        if (!companyId) return;
+        try {
+            await navigator.clipboard.writeText(
+                `${window.location.origin}/shared/company/${companyId}`,
+            );
+            setLinkCopied(true);
+            setTimeout(() => setLinkCopied(false), 1500);
+        } catch {
+            // clipboard access denied — nothing we can do, silently ignore
+        }
+    };
 
     const handleSyncJira = async () => {
         setSyncing(true);
@@ -292,13 +314,27 @@ export default function Sidebar({
                     New page
                 </button>
                 {hasCompany ? (
-                    <button
-                        onClick={() => router.push('/import-jira')}
-                        className="flex w-full items-center gap-2 rounded px-2 py-1 text-sm text-muted-light hover:bg-hover-light hover:text-ink-light dark:text-muted-dark dark:hover:bg-hover-dark dark:hover:text-ink-dark"
-                    >
-                        <LinkIcon className="h-3.5 w-3.5" />
-                        Import from Jira
-                    </button>
+                    <>
+                        <button
+                            onClick={() => router.push('/import-jira')}
+                            className="flex w-full items-center gap-2 rounded px-2 py-1 text-sm text-muted-light hover:bg-hover-light hover:text-ink-light dark:text-muted-dark dark:hover:bg-hover-dark dark:hover:text-ink-dark"
+                        >
+                            <LinkIcon className="h-3.5 w-3.5" />
+                            Import from Jira
+                        </button>
+                        <button
+                            onClick={handleCopyCompanyLink}
+                            disabled={!companyId}
+                            className="flex w-full items-center gap-2 rounded px-2 py-1 text-sm text-muted-light hover:bg-hover-light hover:text-ink-light dark:text-muted-dark dark:hover:bg-hover-dark dark:hover:text-ink-dark disabled:opacity-50"
+                        >
+                            {linkCopied ? (
+                                <CheckIcon className="h-3.5 w-3.5" />
+                            ) : (
+                                <CopyIcon className="h-3.5 w-3.5" />
+                            )}
+                            {linkCopied ? 'Copied!' : 'Copy company link'}
+                        </button>
+                    </>
                 ) : (
                     <button
                         onClick={() => router.push('/companies')}

@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { connectToDatabase } from '@/lib/mongodb';
 import { ACCOUNT_TYPES, User, type AccountType } from '@/models/User';
+import { Company } from '@/models/Company';
+import { signJWT } from '@/lib/auth';
 
 export async function POST(req: Request) {
   try {
@@ -12,7 +14,7 @@ export async function POST(req: Request) {
     // registering as individuals.
     const accountType: AccountType = body.accountType ?? 'individual';
 
-    if (!name || !email || !password || !companyName) {
+    if (!name || !email || !password) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
@@ -48,14 +50,44 @@ export async function POST(req: Request) {
           : undefined,
     });
 
-    return NextResponse.json(
+    // A business account needs a real Company document — everything else
+    // (workspaces, projects, pages, Jira import, share links) hangs off its
+    // _id, not off the display string stored on the user.
+    let companyId: string | null = null;
+    if (accountType === 'business') {
+      const company = await Company.create({ name: companyName, userId: user._id });
+      companyId = company._id.toString();
+    }
+
+    // Registering creates the account (and its company, if any) in one step,
+    // so log the user in immediately instead of sending them to /login.
+    const token = await signJWT({
+      userId: user._id.toString(),
+      email: user.email,
+      role: user.role,
+      accountType,
+    });
+
+    const response = NextResponse.json(
       {
-        message: 'User created successfully',
-        userId: user._id,
-        accountType: user.accountType,
+        message: 'Account created successfully',
+        userId: user._id.toString(),
+        accountType,
+        companyId,
+        companyName: companyId ? companyName : null,
       },
       { status: 201 }
     );
+
+    response.cookies.set('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+      path: '/',
+    });
+
+    return response;
   } catch (error) {
     console.error('Register error:', error);
     return NextResponse.json({ error: 'Registration failed' }, { status: 500 });

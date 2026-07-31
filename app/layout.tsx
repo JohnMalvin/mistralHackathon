@@ -30,7 +30,7 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-    title: 'SPACE',
+    title: 'LexiCode',
     description: 'A Notion-style workspace built with Next.js and Tailwind',
 };
 

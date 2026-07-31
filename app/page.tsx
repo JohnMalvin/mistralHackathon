@@ -31,7 +31,7 @@ const STEPS = [
     {
         n: '01',
         name: 'Connect a board',
-        body: 'Paste a Jira board or issue link. Workspace AI reads the project with your credentials and pulls every issue, description, and status.',
+        body: 'Paste a Jira board or issue link. LexiCode reads the project with your credentials and pulls every issue, description, and status.',
     },
     {
         n: '02',
@@ -112,7 +112,7 @@ export default function LandingPage() {
             <header className="mx-auto flex max-w-[1120px] items-baseline justify-between gap-6 px-6 py-6">
                 <Link href="/" className="flex items-baseline gap-2.5">
                     <span className="gb-display text-[19px] uppercase">
-                        Workspace AI
+                        LexiCode
                     </span>
                     <span className="gb-label hidden sm:block">
                         Jira → pages
@@ -155,7 +155,7 @@ export default function LandingPage() {
                     </h1>
 
                     <p className="mt-7 max-w-[52ch] text-[17px] leading-relaxed text-[var(--ink)]/80">
-                        Workspace AI reads your Jira project and gives the
+                        LexiCode reads your Jira project and gives the
                         outline back — epics as parent pages, everything else
                         nested underneath, every issue still carrying its key.
                     </p>
@@ -269,7 +269,7 @@ export default function LandingPage() {
 
             <footer className="mx-auto flex max-w-[1120px] flex-col gap-4 px-6 py-10 sm:flex-row sm:items-baseline sm:justify-between">
                 <span className="gb-display text-[15px] uppercase">
-                    Workspace AI
+                    LexiCode
                 </span>
                 <p className="gb-label !tracking-[0.1em]">
                     Jira import · Mistral Large · {new Date().getFullYear()}

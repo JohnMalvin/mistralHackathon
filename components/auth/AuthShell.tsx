@@ -26,7 +26,7 @@ export default function AuthShell({
             <header className="mx-auto flex w-full max-w-[1120px] items-baseline justify-between gap-6 px-6 py-6">
                 <Link href="/" className="flex items-baseline gap-2.5">
                     <span className="gb-display text-[19px] uppercase">
-                        Workspace AI
+                        LexiCode
                     </span>
                     <span className="gb-label hidden sm:block">
                         Jira → pages

@@ -3,39 +3,43 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import {
-  Sparkles,
-  User,
-  Mail,
-  Lock,
-  Building2,
-  ArrowRight,
-  AlertCircle,
-  Link as LinkIconLucide,
-  Check,
-  Copy,
-} from 'lucide-react';
+import AccountTypeTabs from '@/components/auth/AccountTypeTabs';
+import AuthShell from '@/components/auth/AuthShell';
+import type { AccountType } from '@/models/User';
 import { useStore } from '@/lib/store';
 import { CompanyDetail, buildImportNode } from '@/lib/companyImport';
 import { ImportNode } from '@/lib/types';
 
 type Step = 'account' | 'jira' | 'done';
 
-export default function RegisterPage() {
+function RegisterForm() {
   const router = useRouter();
-  const [formData, setFormData] = useState({ name: '', email: '', password: '' });
+  const searchParams = useSearchParams();
+  const importTree = useStore((s) => s.importTree);
+  const resetWorkspace = useStore((s) => s.resetWorkspace);
+
+  const [accountType, setAccountType] = useState<AccountType>('individual');
+  const [step, setStep] = useState<Step>('account');
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    password: '',
+    companyName: '',
+  });
+  const [companyId, setCompanyId] = useState<string | null>(null);
+  const [jiraLink, setJiraLink] = useState('');
+  const [copied, setCopied] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const isBusiness = accountType === 'business';
-
-  // The landing page links straight to the business tab.
   useEffect(() => {
+    // The landing page links straight to the business tab.
     if (searchParams.get('type') === 'business') {
       setAccountType('business');
     }
   }, [searchParams]);
 
+  const isBusiness = accountType === 'business';
   const shareUrl =
     companyId && typeof window !== 'undefined'
       ? `${window.location.origin}/shared/company/${companyId}`
@@ -45,21 +49,45 @@ export default function RegisterPage() {
     e.preventDefault();
     setError('');
     setLoading(true);
-
     try {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...formData, accountType }),
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to create account');
 
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to create account');
+      // A different account may have been signed in on this browser before —
+      // drop its cached pages/companies so this account starts clean.
+      resetWorkspace();
+
+      if (isBusiness) {
+        setCompanyId(data.companyId);
+        setStep('jira');
+      } else {
+        router.push('/companies');
       }
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
 
-      // Redirect to login page upon successful account creation
-      router.push('/login?registered=true');
+  async function handleImportJira() {
+    if (!jiraLink.trim() || !companyId) return;
+    setError('');
+    setLoading(true);
+    try {
+      const res = await fetch('/api/jira-import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ link: jiraLink.trim(), companyId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Import failed');
+      setStep('done');
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -93,15 +121,24 @@ export default function RegisterPage() {
     }
   }
 
+  const eyebrow =
+    step === 'account' ? 'Create account' : step === 'jira' ? 'Connect Jira' : 'All set';
+  const title =
+    step === 'account' ? 'Start a workspace' : step === 'jira' ? 'Bring in your Jira' : "You're all set";
+  const intro =
+    step === 'account'
+      ? isBusiness
+        ? 'Register under your company name, then share the workspace with the rest of the team.'
+        : 'Import the Jira projects you work on and keep your notes beside them.'
+      : step === 'jira'
+        ? `Paste a link and we'll turn it into an easy-to-read summary for ${formData.companyName}.`
+        : 'Share this link with your team, or open it now.';
+
   return (
     <AuthShell
-      eyebrow="Create account"
-      title="Start a workspace"
-      intro={
-        isBusiness
-          ? 'Register under your company name, then share the workspace with the rest of the team.'
-          : 'Import the Jira projects you work on and keep your notes beside them.'
-      }
+      eyebrow={eyebrow}
+      title={title}
+      intro={intro}
       altHref="/login"
       altLabel="Sign in"
       footer={
@@ -113,90 +150,138 @@ export default function RegisterPage() {
           >
             Sign in
           </Link>
-          <h2 className="mt-4 text-2xl font-bold text-white">Create an account</h2>
-          <p className="mt-1 text-sm text-zinc-400">
-            Start syncing your Notion notes with live Jira issues
-          </p>
-        </div>
+        </>
+      }
+    >
+      {step === 'account' && (
+        <>
+          <AccountTypeTabs value={accountType} onChange={setAccountType} disabled={loading} />
 
-        {/* Error Alert */}
-        {error && (
-          <div className="mb-6 flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-3.5 text-sm text-red-400">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
+          {error && <p className="gb-note gb-note--error">{error}</p>}
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-zinc-300">
-              Full Name
-            </label>
-            <div className="relative">
-              <User className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+          <form onSubmit={handleCreateAccount}>
+            <label className="gb-field">
+              <span className="gb-label mb-2 block">Your name</span>
               <input
                 type="text"
                 required
                 placeholder="John Doe"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full rounded-xl border border-zinc-800 bg-zinc-900/80 py-2.5 pl-10 pr-4 text-sm text-white placeholder-zinc-500 transition-colors focus:border-sky-500 focus:outline-none"
+                className="gb-input"
               />
-            </div>
-          </div>
-
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-zinc-300">
-              Email Address
             </label>
-            <div className="relative">
-              <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+
+            <label className="gb-field">
+              <span className="gb-label mb-2 block">Email address</span>
               <input
                 type="email"
                 required
-                placeholder="name@example.com"
+                placeholder="you@company.com"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className="w-full rounded-xl border border-zinc-800 bg-zinc-900/80 py-2.5 pl-10 pr-4 text-sm text-white placeholder-zinc-500 transition-colors focus:border-sky-500 focus:outline-none"
+                className="gb-input"
               />
-            </div>
-          </div>
-
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-zinc-300">
-              Password
             </label>
-            <div className="relative">
-              <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+
+            <label className="gb-field">
+              <span className="gb-label mb-2 block">Password</span>
               <input
                 type="password"
                 required
                 placeholder="••••••••"
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                className="w-full rounded-xl border border-zinc-800 bg-zinc-900/80 py-2.5 pl-10 pr-4 text-sm text-white placeholder-zinc-500 transition-colors focus:border-sky-500 focus:outline-none"
+                className="gb-input"
               />
-            </div>
-          </div>
+            </label>
+
+            {isBusiness && (
+              <label className="gb-field">
+                <span className="gb-label mb-2 block">Company name</span>
+                <input
+                  type="text"
+                  required
+                  placeholder="Acme Inc."
+                  value={formData.companyName}
+                  onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
+                  className="gb-input"
+                />
+              </label>
+            )}
+
+            <button type="submit" disabled={loading} className="gb-btn mt-2">
+              {loading ? 'Creating account…' : 'Continue'}
+            </button>
+          </form>
+        </>
+      )}
+
+      {step === 'jira' && (
+        <div>
+          {error && <p className="gb-note gb-note--error">{error}</p>}
+
+          <label className="gb-field">
+            <span className="gb-label mb-2 block">Jira link (optional)</span>
+            <input
+              type="text"
+              placeholder="https://your-domain.atlassian.net/jira/software/projects/SC/boards/3/backlog"
+              value={jiraLink}
+              onChange={(e) => setJiraLink(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleImportJira()}
+              className="gb-input"
+            />
+          </label>
 
           <button
-            type="submit"
-            disabled={loading}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-sky-500 py-3 text-sm font-semibold text-black transition-all hover:bg-sky-400 disabled:opacity-50"
+            onClick={handleImportJira}
+            disabled={loading || !jiraLink.trim()}
+            className="gb-btn"
           >
-            {loading ? 'Creating account...' : 'Get Started'}
-            {!loading && <ArrowRight className="h-4 w-4" />}
+            {loading ? 'Importing…' : 'Import and continue'}
           </button>
-        </form>
 
-        <p className="mt-6 text-center text-xs text-zinc-400">
-          Already have an account?{' '}
-          <Link href="/login" className="font-medium text-sky-400 hover:underline">
-            Sign in
-          </Link>
-        </p>
-      </div>
-    </div>
+          <button
+            onClick={() => setStep('done')}
+            disabled={loading}
+            className="mt-4 w-full text-center text-sm text-[var(--ink)]/60 hover:text-[var(--ink)] disabled:opacity-50"
+          >
+            Skip for now
+          </button>
+        </div>
+      )}
+
+      {step === 'done' && (
+        <div>
+          {error && <p className="gb-note gb-note--error">{error}</p>}
+
+          <div className="mb-6 flex items-center gap-2 border border-[var(--rule)] px-3 py-2.5">
+            <span className="min-w-0 flex-1 truncate font-mono text-xs text-[var(--ink)]/80">
+              {shareUrl}
+            </span>
+            <button
+              onClick={handleCopyLink}
+              className="shrink-0 border border-[var(--rule)] px-2.5 py-1 text-xs font-medium hover:bg-[var(--bar)]"
+            >
+              {copied ? 'Copied!' : 'Copy link'}
+            </button>
+          </div>
+
+          <button onClick={handleOpenWorkspace} disabled={loading} className="gb-btn">
+            {loading ? 'Opening…' : 'Open my workspace'}
+          </button>
+        </div>
+      )}
+    </AuthShell>
+  );
+}
+
+// useSearchParams() opts the tree into client-side rendering, so the form
+// needs a Suspense boundary for the page to prerender.
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<div className="gb min-h-screen" />}>
+      <RegisterForm />
+    </Suspense>
   );
 }

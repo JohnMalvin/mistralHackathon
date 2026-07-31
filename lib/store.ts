@@ -512,7 +512,7 @@ export function seedWorkspaceIfEmpty() {
     const s = useStore.getState();
     if (Object.keys(s.pages).length > 0) return;
 
-    const welcomeId = s.createPage(null, 'Welcome to Notion Clone');
+    const welcomeId = s.createPage(null, 'Welcome to Lexicode');
     useStore.setState((state) => {
         const page = state.pages[welcomeId];
         page.icon = '👋';
@@ -526,7 +526,7 @@ export function seedWorkspaceIfEmpty() {
                 id: nanoid(10),
                 type: 'paragraph',
                 content:
-                    'This is a fully functional Notion-style workspace built with Next.js, React and Tailwind. Click anywhere to start typing.',
+                    'A workspace that transform Jira to a more simplified workspace',
             },
             { id: nanoid(10), type: 'heading2', content: 'Try these things' },
             {

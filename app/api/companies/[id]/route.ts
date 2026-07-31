@@ -31,7 +31,11 @@ export async function GET(
             );
         }
 
-        const company = await Company.findOne({ _id: id, userId }).lean();
+        // Not scoped to the owner's userId: this id is what a share link
+        // hands out, so any signed-in account (not just the owner) needs to
+        // be able to resolve it read-only — that's the whole point of a
+        // shareable link.
+        const company = await Company.findOne({ _id: id }).lean();
         if (!company) {
             return NextResponse.json({ error: 'Company not found' }, { status: 404 });
         }
