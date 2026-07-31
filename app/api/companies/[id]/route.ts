@@ -23,7 +23,15 @@ export async function GET(
 
         await connectToDatabase();
 
-        const company = await Company.findById(id).lean();
+        const userId = request.headers.get('x-user-id');
+        if (!userId) {
+            return NextResponse.json(
+                { error: 'Authentication required' },
+                { status: 401 },
+            );
+        }
+
+        const company = await Company.findOne({ _id: id, userId }).lean();
         if (!company) {
             return NextResponse.json({ error: 'Company not found' }, { status: 404 });
         }

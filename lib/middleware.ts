@@ -11,6 +11,12 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Jira import doesn't need a logged-in session — it falls back to
+  // JIRA_EMAIL / a fixed local owner when no session headers are present.
+  if (pathname.startsWith('/api/jira-import')) {
+    return NextResponse.next();
+  }
+
   // 2. Extract token from cookie
   const token = request.cookies.get('token')?.value;
 

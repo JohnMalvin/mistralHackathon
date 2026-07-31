@@ -141,27 +141,53 @@ export const useStore = create<Store>()(
                     if (node.blocks && node.blocks.length > 0) {
                         page.blocks = node.blocks;
                     }
-                    page.dbSourceId = node.dbId;
+                    if (node.isContentPage) {
+                        page.dbSourceId = node.dbId;
+                    }
                     localId = page.id;
 
-                    set((s) => {
-                        const pages = { ...s.pages, [localId]: page };
-                        if (parentId && pages[parentId]) {
-                            pages[parentId] = {
+                    set((s) => ({
+                        pages: { ...s.pages, [localId]: page },
+                        dbPageMap: { ...s.dbPageMap, [node.dbId]: localId },
+                    }));
+                }
+
+                // Whether reused or freshly created, guarantee it's actually
+                // visible: un-trash it and make sure it's attached to its
+                // parent's children (or rootIds). This repairs a page that
+                // was imported before but got detached since (e.g. moved to
+                // trash), instead of silently reusing an orphaned id.
+                set((s) => {
+                    const page = s.pages[localId];
+                    if (!page) return {};
+
+                    const restored = page.isDeleted
+                        ? { ...page, isDeleted: false }
+                        : page;
+                    let pages =
+                        restored === page
+                            ? s.pages
+                            : { ...s.pages, [localId]: restored };
+
+                    let rootIds = s.rootIds;
+                    if (!parentId) {
+                        if (!rootIds.includes(localId)) {
+                            rootIds = [...rootIds, localId];
+                        }
+                    } else if (
+                        pages[parentId] &&
+                        !pages[parentId].children.includes(localId)
+                    ) {
+                        pages = {
+                            ...pages,
+                            [parentId]: {
                                 ...pages[parentId],
                                 children: [...pages[parentId].children, localId],
-                            };
-                        }
-                        const rootIds = parentId
-                            ? s.rootIds
-                            : [...s.rootIds, localId];
-                        return {
-                            pages,
-                            rootIds,
-                            dbPageMap: { ...s.dbPageMap, [node.dbId]: localId },
+                            },
                         };
-                    });
-                }
+                    }
+                    return { pages, rootIds };
+                });
 
                 for (const child of node.children) {
                     get().importTree(child, localId);

@@ -214,8 +214,16 @@ async function seedMockOrg(companyId: unknown) {
 // -------------------------------------------------------------
 export async function POST(request: Request) {
     try {
+        const userId = request.headers.get('x-user-id');
         const body = await request.json();
         const { name } = body;
+
+        if (!userId) {
+            return NextResponse.json(
+                { error: 'Authentication required' },
+                { status: 401 },
+            );
+        }
 
         if (!name) {
             return NextResponse.json({ error: 'Missing name' }, { status: 400 });
@@ -223,9 +231,9 @@ export async function POST(request: Request) {
 
         await connectToDatabase();
 
-        let company = await Company.findOne({ name });
+        let company = await Company.findOne({ name, userId });
         if (!company) {
-            company = await Company.create({ name });
+            company = await Company.create({ name, userId });
         }
 
         const existingWorkspaceCount = await Workspace.countDocuments({

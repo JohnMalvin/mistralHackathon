@@ -7,17 +7,6 @@ import { normalizePageJson } from '@/lib/pageJson';
 import DocumentView from '@/components/editor/DocumentView';
 import EmptyState from '@/components/editor/EmptyState';
 
-// TODO: replace with a real fetch (e.g. GET /api/pages/:id) once pages are
-// looked up from MongoDB instead of being hardcoded here.
-const PAGE_JSON = {
-    title: 'Fruit Notes',
-    icon: '🍎',
-    blocks: [
-        { type: 'heading3', content: 'apple' },
-        { type: 'bulleted', content: 'hdfhsdjbfkbd' },
-    ],
-};
-
 export default function Workspace({ pageId }: { pageId: string | null }) {
     const setLastOpened = useStore((s) => s.setLastOpened);
     const lastOpenedId = useStore((s) => s.lastOpenedId);
@@ -29,7 +18,15 @@ export default function Workspace({ pageId }: { pageId: string | null }) {
         if (pageId) {
             setLastOpened(pageId);
             if (!pages[pageId]) {
-                hydratePageAtId(pageId, normalizePageJson(PAGE_JSON));
+                (async () => {
+                    const res = await fetch(`/api/pages/${pageId}`);
+                    if (res.ok) {
+                        const raw = await res.json();
+                        hydratePageAtId(pageId, normalizePageJson(raw));
+                    } else {
+                        router.replace('/');
+                    }
+                })();
             }
         } else if (
             lastOpenedId &&

@@ -12,6 +12,7 @@ import {
     StarIcon,
     SunIcon,
     MoonIcon,
+    LinkIcon,
 } from '@/components/ui/Icons';
 import { ChevronDown, RefreshCw, LogOut, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 
@@ -268,11 +269,18 @@ export default function Sidebar({
                     New page
                 </button>
                 <button
-                    onClick={() => router.push('/projects')}
+                    onClick={() => router.push('/companies')}
                     className="flex w-full items-center gap-2 rounded px-2 py-1 text-sm text-muted-light hover:bg-hover-light hover:text-ink-light dark:text-muted-dark dark:hover:bg-hover-dark dark:hover:text-ink-dark"
                 >
                     <SearchIcon className="h-3.5 w-3.5" />
-                    Browse projects
+                    Browse companies
+                </button>
+                <button
+                    onClick={() => router.push('/import-jira')}
+                    className="flex w-full items-center gap-2 rounded px-2 py-1 text-sm text-muted-light hover:bg-hover-light hover:text-ink-light dark:text-muted-dark dark:hover:bg-hover-dark dark:hover:text-ink-dark"
+                >
+                    <LinkIcon className="h-3.5 w-3.5" />
+                    Import from Jira
                 </button>
                 <button
                     onClick={() => router.push('/trash')}
