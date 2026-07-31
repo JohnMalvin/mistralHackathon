@@ -1,14 +1,22 @@
-import { NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/mongodb';
 import { Project } from '@/models/Project';
 import { Page } from '@/models/Page';
 
 export async function POST(req: Request) {
   try {
+    // 1. Extract authenticated user details passed from Middleware
+    const userId = req.headers.get('x-user-id');
+    if (!userId) {
+      return Response.json(
+        { error: 'Unauthorized: Missing user authentication context' },
+        { status: 401 }
+      );
+    }
+
     const connectorId =
       process.env.MISTRAL_ATLASSIAN_CONNECTOR_ID || '0198e70f-57b0-77f6-a752-0a7f5ea2da35';
 
-    // 1. Fetch structured workspace data from Mistral AI
+    // 2. Fetch structured workspace data from Mistral AI Jira Connector
     const mistralResponse = await fetch('https://api.mistral.ai/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -62,7 +70,7 @@ Output MUST be strictly valid JSON matching this schema:
 
     if (!mistralResponse.ok) {
       const errorText = await mistralResponse.text();
-      return NextResponse.json(
+      return Response.json(
         { error: `Mistral Connector Error: ${errorText}` },
         { status: mistralResponse.status }
       );
@@ -72,25 +80,26 @@ Output MUST be strictly valid JSON matching this schema:
     const rawContent = mistralData.choices?.[0]?.message?.content;
 
     if (!rawContent) {
-      return NextResponse.json({ error: 'Empty AI response' }, { status: 502 });
+      return Response.json({ error: 'Empty AI response' }, { status: 502 });
     }
 
     const parsedData = JSON.parse(rawContent);
 
     if (!parsedData.projectName || !Array.isArray(parsedData.pages)) {
-      return NextResponse.json(
+      return Response.json(
         { error: 'Invalid payload structure returned from AI' },
         { status: 422 }
       );
     }
 
-    // 2. Connect to MongoDB
+    // 3. Connect to MongoDB
     await connectToDatabase();
 
-    // 3. Upsert the primary Project document
+    // 4. Upsert primary Project document (scoped to user)
     const project = await Project.findOneAndUpdate(
-      { name: parsedData.projectName },
+      { name: parsedData.projectName, userId },
       {
+        userId,
         name: parsedData.projectName,
         jiraProjectKey: parsedData.jiraProjectKey || '',
         updatedAt: new Date(),
@@ -98,11 +107,12 @@ Output MUST be strictly valid JSON matching this schema:
       { upsert: true, new: true }
     );
 
-    // 4. Upsert each child Page under this Project ID
+    // 5. Upsert each child Page under this Project ID (scoped to user)
     const pageOperations = parsedData.pages.map((pageData: any) =>
       Page.findOneAndUpdate(
-        { projectId: project._id, slug: pageData.slug },
+        { projectId: project._id, slug: pageData.slug, userId },
         {
+          userId,
           projectId: project._id,
           title: pageData.title,
           slug: pageData.slug,
@@ -115,7 +125,8 @@ Output MUST be strictly valid JSON matching this schema:
 
     const savedPages = await Promise.all(pageOperations);
 
-    return NextResponse.json(
+    // 6. Return standard JSON response
+    return Response.json(
       {
         message: 'Jira workspace successfully synced to projects and pages.',
         project,
@@ -126,7 +137,7 @@ Output MUST be strictly valid JSON matching this schema:
     );
   } catch (error) {
     console.error('Jira Sync Error:', error);
-    return NextResponse.json(
+    return Response.json(
       { error: 'Internal Server Error during Jira sync' },
       { status: 500 }
     );

@@ -1,32 +1,23 @@
+// app/api/chat/route.ts
 import { connectToDatabase } from '@/lib/mongodb';
 import { Project } from '@/models/Project';
 import { Page } from '@/models/Page';
-import { ChatSession } from '@/models/ChatSession'; // Adjust import paths to match your project
+import { ChatSession } from '@/models/ChatSession';
 
-/**
- * Reconstructs the workspace context from MongoDB by fetching
- * the parent Project and merging all child Pages into clean Markdown.
- */
 async function getReconstructedJiraContext(projectId?: string) {
   await connectToDatabase();
 
-  // 1. Fetch Project (by ID or fallback to the most recently updated project)
   const project = projectId
     ? await Project.findById(projectId).lean()
     : await Project.findOne().sort({ updatedAt: -1 }).lean();
 
   if (!project) return 'No Jira context found in database.';
 
-  // 2. Fetch all Pages belonging to this Project
   const pages = await Page.find({ projectId: project._id }).lean();
 
-  // 3. Format into a unified Markdown string
   const projectHeader = `# Project: ${project.name} (Key: ${project.jiraProjectKey || 'N/A'})\n\n`;
-
   const pagesContent = pages
-    .map(
-      (p: any) => `## Page: ${p.title}\n${JSON.stringify(p.content, null, 2)}`
-    )
+    .map((p: any) => `## Page: ${p.title}\n${JSON.stringify(p.content, null, 2)}`)
     .join('\n\n---\n\n');
 
   return `${projectHeader}${pagesContent}`;
@@ -34,32 +25,37 @@ async function getReconstructedJiraContext(projectId?: string) {
 
 export async function POST(req: Request) {
   try {
+    // 1. Extract authenticated user details passed by middleware
+    const userId = req.headers.get('x-user-id');
+    const userEmail = req.headers.get('x-user-email');
+
     const { message, sessionId, projectId } = await req.json();
 
     if (!message || !sessionId) {
-      return new Response('Missing message or sessionId parameter', { status: 400 });
+      return Response.json(
+        { error: 'Missing message or sessionId parameter' },
+        { status: 400 }
+      );
     }
 
     await connectToDatabase();
 
-    // 1. Reconstruct full workspace context from DB (Projects + Pages)
     const reconstructedContext = await getReconstructedJiraContext(projectId);
 
-    // 2. Load or initialize chat session
-    let chatSession = await ChatSession.findOne({ sessionId });
+    // Bind chat session to the authenticated userId
+    let chatSession = await ChatSession.findOne({ sessionId, userId });
 
     if (!chatSession) {
       chatSession = new ChatSession({
         sessionId,
+        userId, // Linked to the authenticated user!
         messages: [],
       });
     }
 
-    // Append and IMMEDIATELY SAVE user message to prevent data loss if stream breaks
     chatSession.messages.push({ role: 'user', content: message });
     await chatSession.save();
 
-    // Format chat history for Mistral payload
     const formattedHistory = chatSession.messages.map((m: { role: string; content: string }) => ({
       role: m.role,
       content: m.content,
@@ -68,12 +64,11 @@ export async function POST(req: Request) {
     const apiMessages = [
       {
         role: 'system',
-        content: `You are an AI assistant for project management updates. Use the provided Jira workspace documentation (Project details and Sprint/Technical pages) to accurately answer user queries.\n\nContext Documentation:\n${reconstructedContext}`,
+        content: `You are an AI assistant for project management updates. Active User Email: ${userEmail}\n\nContext Documentation:\n${reconstructedContext}`,
       },
       ...formattedHistory,
     ];
 
-    // 3. Request streaming response from Mistral AI API
     const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -92,7 +87,6 @@ export async function POST(req: Request) {
       return new Response(`Mistral API Error: ${errorText}`, { status: response.status });
     }
 
-    // 4. Stream response and buffer for DB persistence
     const encoder = new TextEncoder();
     const decoder = new TextDecoder();
     let accumulatedAssistantResponse = '';
@@ -129,13 +123,12 @@ export async function POST(req: Request) {
                   controller.enqueue(encoder.encode(content));
                 }
               } catch (e) {
-                console.error('Error parsing SSE line', e);
+                console.error('SSE Error', e);
               }
             }
           }
         }
 
-        // Atomic push to update assistant response in MongoDB upon completion
         if (accumulatedAssistantResponse) {
           try {
             await ChatSession.updateOne(
@@ -151,7 +144,7 @@ export async function POST(req: Request) {
               }
             );
           } catch (dbErr) {
-            console.error('Failed to save assistant response to DB:', dbErr);
+            console.error('Failed to update DB:', dbErr);
           }
         }
 
