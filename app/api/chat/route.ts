@@ -1,48 +1,84 @@
+// app/api/chat/route.ts
 import { connectToDatabase } from '@/lib/mongodb';
-import { Company } from '@/models/Company';
+import { Project } from '@/models/Project';
+import { Page } from '@/models/Page';
+import { ChatSession } from '@/models/ChatSession';
+
+async function getReconstructedJiraContext(projectId?: string) {
+  await connectToDatabase();
+
+  const project = projectId
+    ? await Project.findById(projectId).lean()
+    : await Project.findOne().sort({ updatedAt: -1 }).lean();
+
+  if (!project) return 'No Jira context found in database.';
+
+  const pages = await Page.find({ projectId: project._id }).lean();
+
+  const projectHeader = `# Project: ${project.name} (Key: ${project.jiraProjectKey || 'N/A'})\n\n`;
+  const pagesContent = pages
+    .map((p: any) => `## Page: ${p.title}\n${JSON.stringify(p.content, null, 2)}`)
+    .join('\n\n---\n\n');
+
+  return `${projectHeader}${pagesContent}`;
+}
 
 export async function POST(req: Request) {
   try {
-    const { messages, companyId } = await req.json();
+    // 1. Extract authenticated user details passed by middleware
+    const userId = req.headers.get('x-user-id');
+    const userEmail = req.headers.get('x-user-email');
 
-    if (!companyId) {
-      return new Response('Missing companyId parameter', { status: 400 });
+    const { message, sessionId, projectId } = await req.json();
+
+    if (!message || !sessionId) {
+      return Response.json(
+        { error: 'Missing message or sessionId parameter' },
+        { status: 400 }
+      );
     }
 
-    // 1. Connect directly to MongoDB
     await connectToDatabase();
 
-    // 2. Query company data directly using Mongoose
-    const company = await Company.findOne(
-      { name: companyId }, // or { companyId: companyId } depending on your schema field
-      { jiraData: 1, _id: 0 }
-    ).lean();
+    const reconstructedContext = await getReconstructedJiraContext(projectId);
 
-    // Extract jiraData string/JSON or default to fallback message
-    const jiraMarkdownContext = company?.jiraData
-      ? typeof company.jiraData === 'string'
-        ? company.jiraData
-        : JSON.stringify(company.jiraData)
-      : 'No Jira context found for this company.';
+    // Bind chat session to the authenticated userId
+    let chatSession = await ChatSession.findOne({ sessionId, userId });
 
-    // 3. Call Mistral REST API using native fetch
+    if (!chatSession) {
+      chatSession = new ChatSession({
+        sessionId,
+        userId, // Linked to the authenticated user!
+        messages: [],
+      });
+    }
+
+    chatSession.messages.push({ role: 'user', content: message });
+    await chatSession.save();
+
+    const formattedHistory = chatSession.messages.map((m: { role: string; content: string }) => ({
+      role: m.role,
+      content: m.content,
+    }));
+
+    const apiMessages = [
+      {
+        role: 'system',
+        content: `You are an AI assistant for project management updates. Active User Email: ${userEmail}\n\nContext Documentation:\n${reconstructedContext}`,
+      },
+      ...formattedHistory,
+    ];
+
     const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.MISTRAL_API_KEY}`,
+        Authorization: `Bearer ${process.env.MISTRAL_API_KEY}`,
       },
       body: JSON.stringify({
         model: 'mistral-large-latest',
         stream: true,
-        messages: [
-          {
-            role: 'system',
-            content: `You are an AI assistant for company: ${companyId}.\n\n
-                      Context Jira Documentation:\n${jiraMarkdownContext}`,
-          },
-          ...messages,
-        ],
+        messages: apiMessages,
       }),
     });
 
@@ -51,9 +87,9 @@ export async function POST(req: Request) {
       return new Response(`Mistral API Error: ${errorText}`, { status: response.status });
     }
 
-    // 4. Parse Mistral SSE stream and forward plain text to frontend
     const encoder = new TextEncoder();
     const decoder = new TextDecoder();
+    let accumulatedAssistantResponse = '';
 
     const stream = new ReadableStream({
       async start(controller) {
@@ -83,14 +119,35 @@ export async function POST(req: Request) {
                 const json = JSON.parse(trimmed.replace('data: ', ''));
                 const content = json.choices[0]?.delta?.content;
                 if (content) {
+                  accumulatedAssistantResponse += content;
                   controller.enqueue(encoder.encode(content));
                 }
               } catch (e) {
-                console.error('Error parsing SSE line', e);
+                console.error('SSE Error', e);
               }
             }
           }
         }
+
+        if (accumulatedAssistantResponse) {
+          try {
+            await ChatSession.updateOne(
+              { sessionId },
+              {
+                $push: {
+                  messages: {
+                    role: 'assistant',
+                    content: accumulatedAssistantResponse,
+                    createdAt: new Date(),
+                  },
+                },
+              }
+            );
+          } catch (dbErr) {
+            console.error('Failed to update DB:', dbErr);
+          }
+        }
+
         controller.close();
       },
     });
@@ -99,7 +156,7 @@ export async function POST(req: Request) {
       headers: { 'Content-Type': 'text/plain; charset=utf-8' },
     });
   } catch (error) {
-    console.error('Route error:', error);
+    console.error('POST Chat Error:', error);
     return new Response('Internal Server Error', { status: 500 });
   }
 }
