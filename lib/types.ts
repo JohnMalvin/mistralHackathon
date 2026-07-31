@@ -45,13 +45,16 @@ export interface WorkspaceState {
 
 // A resolved (already-fetched) tree node ready to be hydrated into the local
 // store — used to import a whole Company/Workspace/Project/Page hierarchy at
-// once. `blocks` omitted means "structural" node (Company/Workspace/Project);
-// only real content pages carry blocks.
+// once. `isContentPage` distinguishes real Page documents (which the editor
+// should auto-sync back to /api/pages/:id) from structural Company/Workspace/
+// Project container nodes (whose dbId points to a different collection, so
+// they must not be wired up for that same auto-sync).
 export interface ImportNode {
     dbId: string;
     title: string;
     icon?: string;
     blocks?: Block[];
+    isContentPage?: boolean;
     children: ImportNode[];
 }
 

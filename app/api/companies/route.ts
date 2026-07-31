@@ -2,9 +2,15 @@ import { NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/mongodb';
 import { Company } from '@/models/Company';
 
+function escapeRegex(s: string) {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // -------------------------------------------------------------
-// GET: Look up a company by exact name (read-only — does not create).
-// URL Example: /api/companies?name=Acme
+// GET: Search companies by name (case-insensitive, partial match).
+// Returns every match so the caller can disambiguate similarly-named
+// companies instead of guessing which one "the" match is.
+// URL Example: /api/companies?name=acme
 // -------------------------------------------------------------
 export async function GET(request: Request) {
     try {
@@ -20,15 +26,15 @@ export async function GET(request: Request) {
 
         await connectToDatabase();
 
-        const company = await Company.findOne({ name }).lean();
-
-        if (!company) {
-            return NextResponse.json({ error: 'Company not found' }, { status: 404 });
-        }
+        const companies = await Company.find({
+            name: { $regex: escapeRegex(name), $options: 'i' },
+        }).lean();
 
         return NextResponse.json({
-            id: company._id.toString(),
-            name: company.name,
+            companies: companies.map((c) => ({
+                id: c._id.toString(),
+                name: c.name,
+            })),
         });
     } catch (error) {
         console.error('GET /api/companies error:', error);

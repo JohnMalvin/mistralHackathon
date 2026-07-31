@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import "./globals.css";
+import "@/styles/globals.css";
 import AIChatBox from "@/components/AIChatBox";
 
 export const metadata: Metadata = {
