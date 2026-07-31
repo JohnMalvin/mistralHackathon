@@ -3,14 +3,14 @@ import "./globals.css";
 import AIChatBox from "@/components/AIChatBox";
 
 export const metadata: Metadata = {
-  title: "Notion Clone",
-  description: "A Notion-style workspace built with Next.js and Tailwind",
+    title: 'Notion Clone',
+    description: 'A Notion-style workspace built with Next.js and Tailwind',
 };
 
 export default function RootLayout({
-  children,
+    children,
 }: {
-  children: React.ReactNode;
+    children: React.ReactNode;
 }) {
   return (
     <html lang="en">

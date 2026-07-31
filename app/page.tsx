@@ -1,5 +1,5 @@
-import Workspace from "@/components/Workspace";
+import Workspace from '@/components/Workspace';
 
 export default function Home() {
-  return <Workspace pageId={null} />;
+    return <Workspace pageId={null} />;
 }
