@@ -166,6 +166,13 @@ export default function Sidebar({
                     New page
                 </button>
                 <button
+                    onClick={() => router.push('/projects')}
+                    className="flex w-full items-center gap-2 rounded px-2 py-1 text-sm text-muted-light hover:bg-hover-light hover:text-ink-light dark:text-muted-dark dark:hover:bg-hover-dark dark:hover:text-ink-dark"
+                >
+                    <SearchIcon className="h-3.5 w-3.5" />
+                    Browse projects
+                </button>
+                <button
                     onClick={() => router.push('/trash')}
                     className="flex w-full items-center gap-2 rounded px-2 py-1 text-sm text-muted-light hover:bg-hover-light hover:text-ink-light dark:text-muted-dark dark:hover:bg-hover-dark dark:hover:text-ink-dark"
                 >

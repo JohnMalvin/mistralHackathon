@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/lib/store';
 import { PageData } from '@/lib/types';
@@ -37,6 +37,23 @@ export default function DocumentView({ page }: { page: PageData }) {
     const [coverPickerOpen, setCoverPickerOpen] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
     const titleRef = useRef<HTMLTextAreaElement>(null);
+
+    useEffect(() => {
+        if (!page.dbSourceId) return;
+        const dbSourceId = page.dbSourceId;
+        const timer = setTimeout(() => {
+            fetch(`/api/pages/${dbSourceId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: page.title,
+                    icon: page.icon,
+                    blocks: page.blocks,
+                }),
+            }).catch((err) => console.error('Failed to sync page to DB', err));
+        }, 800);
+        return () => clearTimeout(timer);
+    }, [page.dbSourceId, page.title, page.icon, page.blocks]);
 
     function autosize() {
         const el = titleRef.current;

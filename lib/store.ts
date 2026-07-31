@@ -3,7 +3,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { nanoid } from 'nanoid';
-import { Block, BlockType, PageData, WorkspaceState } from './types';
+import { Block, BlockType, ImportNode, PageData, WorkspaceState } from './types';
+import { NormalizedPageJson } from './pageJson';
 
 function makeBlock(type: BlockType = 'paragraph', content = ''): Block {
     return { id: nanoid(10), type, content, checked: false };
@@ -32,6 +33,9 @@ interface Store extends WorkspaceState {
     toggleSidebar: () => void;
 
     createPage: (parentId?: string | null, title?: string) => string;
+    importDbPage: (dbId: string, data: NormalizedPageJson) => string;
+    hydratePageAtId: (id: string, data: NormalizedPageJson) => void;
+    importTree: (node: ImportNode, parentId: string | null) => string;
     deletePage: (id: string) => void;
     restorePage: (id: string) => void;
     permanentlyDeletePage: (id: string) => void;
@@ -69,6 +73,7 @@ export const useStore = create<Store>()(
             pages: {},
             rootIds: [],
             lastOpenedId: null,
+            dbPageMap: {},
             darkMode: false,
             sidebarOpen: true,
 
@@ -91,6 +96,77 @@ export const useStore = create<Store>()(
                     return { pages, rootIds };
                 });
                 return page.id;
+            },
+
+            importDbPage: (dbId, data) => {
+                const existing = get().dbPageMap[dbId];
+                if (existing && get().pages[existing]) return existing;
+
+                const page = makePage(null, data.title);
+                page.icon = data.icon;
+                page.blocks = data.blocks;
+                page.dbSourceId = dbId;
+
+                set((s) => ({
+                    pages: { ...s.pages, [page.id]: page },
+                    rootIds: [...s.rootIds, page.id],
+                    dbPageMap: { ...s.dbPageMap, [dbId]: page.id },
+                }));
+                return page.id;
+            },
+
+            hydratePageAtId: (id, data) => {
+                if (get().pages[id]) return;
+
+                const page = makePage(null, data.title);
+                page.id = id;
+                page.icon = data.icon;
+                page.blocks = data.blocks;
+
+                set((s) => ({
+                    pages: { ...s.pages, [id]: page },
+                    rootIds: [...s.rootIds, id],
+                }));
+            },
+
+            importTree: (node, parentId) => {
+                const existing = get().dbPageMap[node.dbId];
+                let localId: string;
+
+                if (existing && get().pages[existing]) {
+                    localId = existing;
+                } else {
+                    const page = makePage(parentId, node.title);
+                    page.icon = node.icon ?? '📁';
+                    if (node.blocks && node.blocks.length > 0) {
+                        page.blocks = node.blocks;
+                    }
+                    page.dbSourceId = node.dbId;
+                    localId = page.id;
+
+                    set((s) => {
+                        const pages = { ...s.pages, [localId]: page };
+                        if (parentId && pages[parentId]) {
+                            pages[parentId] = {
+                                ...pages[parentId],
+                                children: [...pages[parentId].children, localId],
+                            };
+                        }
+                        const rootIds = parentId
+                            ? s.rootIds
+                            : [...s.rootIds, localId];
+                        return {
+                            pages,
+                            rootIds,
+                            dbPageMap: { ...s.dbPageMap, [node.dbId]: localId },
+                        };
+                    });
+                }
+
+                for (const child of node.children) {
+                    get().importTree(child, localId);
+                }
+                return localId;
             },
 
             deletePage: (id) => {

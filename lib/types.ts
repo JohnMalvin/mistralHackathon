@@ -33,12 +33,26 @@ export interface PageData {
     isDeleted?: boolean;
     createdAt: number;
     updatedAt: number;
+    dbSourceId?: string; // Mongo _id this page was imported from, if any
 }
 
 export interface WorkspaceState {
     pages: Record<string, PageData>;
     rootIds: string[];
     lastOpenedId: string | null;
+    dbPageMap: Record<string, string>; // Mongo page id -> local page id
+}
+
+// A resolved (already-fetched) tree node ready to be hydrated into the local
+// store — used to import a whole Company/Workspace/Project/Page hierarchy at
+// once. `blocks` omitted means "structural" node (Company/Workspace/Project);
+// only real content pages carry blocks.
+export interface ImportNode {
+    dbId: string;
+    title: string;
+    icon?: string;
+    blocks?: Block[];
+    children: ImportNode[];
 }
 
 export const BLOCK_LABELS: Record<BlockType, string> = {

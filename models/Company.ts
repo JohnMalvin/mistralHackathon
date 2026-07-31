@@ -2,13 +2,13 @@ import { Schema, model, models } from 'mongoose';
 
 export interface ICompany {
   name: string;
-  jiraData: Record<string, any>; // Stores the Jira JSON / Markdown payload
+  jiraData?: Record<string, any>; // Stores the Jira JSON / Markdown payload
   updatedAt?: Date;
 }
 
 const CompanySchema = new Schema<ICompany>({
   name: { type: String, required: true, unique: true },
-  jiraData: { type: Schema.Types.Mixed, required: true },
+  jiraData: { type: Schema.Types.Mixed, default: {} },
   updatedAt: { type: Date, default: Date.now },
 });
 
